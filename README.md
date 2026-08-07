@@ -133,7 +133,7 @@ audio seemed to briefly speed up and go offbeat. Waveform inspection showed
 no splice error; both sides of every join were individually smooth.
 
 Cross-correlating each clip's opening against the previous clip's ending
-(the `seam_probe.py` script in this repo) revealed the real problem: the
+(the `tests/seam_probe.py` script in this repo) revealed the real problem: the
 new clip's audio *resembled* the old clip's - same instruments, same
 groove - but never matched it. A cover band, not the same recording. The
 model was treating the reference as "a separate clip that sounds like
@@ -152,11 +152,11 @@ same measurement across a multi-clip chain shows the offset does **not**
 grow from join to join - each clip re-anchors from absolute positions, so
 timing errors don't compound.
 
-`seam_probe.py` is included. Point it at the previous clip's audio and the
+`tests/seam_probe.py` is included. Point it at the previous clip's audio and the
 new clip's **untrimmed** audio and it scores the join:
 
 ```
-python seam_probe.py clipA.flac clipB_untrimmed.flac --frames 22 --win-ms 100 --search-ms 60
+python tests/seam_probe.py clipA.flac clipB_untrimmed.flac --frames 22 --win-ms 100 --search-ms 60
 ```
 
 ## Limitations
@@ -234,6 +234,6 @@ Both should print their checks and finish with a pass line.
 |---|---|
 | `patch_layout.py` | Lifts the first/last-only keyframe restriction; moves pinned audio onto the clip timeline; keeps everything aligned when references shift the layout. Self-tests at startup. |
 | `patch_payload.py` | Lets pinned video and pinned audio coexist (stock code let one overwrite the other). |
-| `nodes.py` | The two nodes: Motion Context and Trim. |
-| `seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
+| `nodes.py` | The four nodes: Motion Context, Trim, and the latent Save/Load pair. |
+| `tests/seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
 | `tests/` | Standalone tests for the patches and the node; run without ComfyUI (numpy only). |
