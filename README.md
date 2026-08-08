@@ -48,7 +48,7 @@ run. That's deliberate: a loud failure beats a subtly wrong render.
 ## Wiring
 
 ```
-MiniMaxH3ImageToVideo (or the t2v path)
+MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo (or the t2v path)
   -> H3 Motion Context      <- previous clip's frames + audio
   -> guider / sampler
   ...
@@ -88,6 +88,23 @@ H3 audio VAE in `audio_vae` - still works and is used when no latent is
 wired; it costs one extra lossy VAE round trip per link (see Limitations).
 Wire the `trim_frames` output into the Trim node so the duplicated head -
 picture and sound together, in sync - comes off before you concatenate.
+
+For **Ref2VA/R2V**, connect the conditioning and latent from the stock
+`MiniMaxH3ReferenceToVideo` node exactly the same way. Motion Context preserves
+its existing image, video, and audio references, then appends the continuation
+audio as the final reference block. This ordering matters: older versions of
+this repo replaced `minimax_refs`, which silently dropped the R2V references,
+and the layout patch rejected the resulting multi-reference audio setup. Both
+paths are now handled inside the Motion Context node; no separate patch script
+or ComfyUI-core edit is required.
+
+The Ref2VA multi-reference/audio compatibility
+[fix](https://discord.com/channels/1076117621407223829/1535700117452226560/1535771676158206032)
+and [six-clip global-ref demo workflow](https://discord.com/channels/1076117621407223829/1535700117452226560/1535771814452793474)
+were contributed by **seitanism** in the Banodoco MiniMax H3
+seamless-extension thread.
+They are included here with attribution; this repo integrates the shared patch
+directly so users do not have to run its external patching script.
 
 ## Settings and what to pick
 
@@ -223,7 +240,7 @@ scripts that run without ComfyUI or a GPU (only numpy needed):
 
 ```
 python tests/_mock_harness.py       # patch logic against a faithful stock model
-python tests/_node_smoke_test.py    # the node end to end, including save/load
+python tests/_node_smoke_test.py    # the node end to end, R2V refs + save/load
 ```
 
 Both should print their checks and finish with a pass line.
@@ -232,8 +249,12 @@ Both should print their checks and finish with a pass line.
 
 | File | Role |
 |---|---|
-| `patch_layout.py` | Lifts the first/last-only keyframe restriction; moves pinned audio onto the clip timeline; keeps everything aligned when references shift the layout. Self-tests at startup. |
+| `patch_layout.py` | Lifts the first/last-only keyframe restriction; moves pinned audio onto the clip timeline, including after existing R2V refs; keeps everything aligned when references shift the layout. Self-tests at startup. |
 | `patch_payload.py` | Lets pinned video and pinned audio coexist (stock code let one overwrite the other). |
 | `nodes.py` | The four nodes: Motion Context, Trim, and the latent Save/Load pair. |
 | `tests/seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
 | `tests/` | Standalone tests for the patches and the node; run without ComfyUI (numpy only). |
+
+The `example_workflows/` folder contains both the original compact FL2VA demo
+and seitanism's six-clip Ref2VA/global-reference chain. See its README for the
+additional workflow dependencies.

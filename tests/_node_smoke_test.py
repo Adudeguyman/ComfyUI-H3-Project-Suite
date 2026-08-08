@@ -2,9 +2,10 @@
 
 Fakes ComfyUI's modules and tensor ops (numpy-backed) and drives the node
 exactly as a graph would: a 124-frame clip at 480x864, 22 context frames,
-audio from the previous clip's LATENT. Checks the produced conditioning
-values: keyframe count and indices, the audio ref's step count, and the
-fractional end_frame carrying the grid-overhang compensation.
+audio from the previous clip's LATENT. Starts with Ref2VA image/video refs and
+checks that they survive ahead of the appended Motion Context audio ref, plus
+the keyframe count and indices, audio step count, and fractional end_frame
+carrying the grid-overhang compensation.
 """
 
 import sys
@@ -89,9 +90,20 @@ def main():
     captured = {}
     nh = types.ModuleType("node_helpers")
 
-    def conditioning_set_values(cond, values):
-        captured.update(values)
-        return cond
+    def conditioning_set_values(cond, values, append=False):
+        out = []
+        for item in cond:
+            meta = item[1].copy()
+            for key, incoming in values.items():
+                value = incoming
+                if append and meta.get(key) is not None:
+                    value = meta[key] + incoming
+                meta[key] = value
+            out.append([item[0], meta])
+        captured.clear()
+        if out:
+            captured.update(out[0][1])
+        return out
     nh.conditioning_set_values = conditioning_set_values
     sys.modules["node_helpers"] = nh
 
@@ -163,8 +175,21 @@ def main():
             return T(np.zeros((1, 16, steps, h, w), dtype=np.float32))
 
     node = nodes.MiniMaxH3MotionContext()
+    # Simulate conditioning produced by MiniMaxH3ReferenceToVideo. Motion
+    # Context must append its timeline-audio block without dropping either
+    # existing Ref2VA block.
+    r2v_refs = [
+        {"kind": "image", "latent_h": h, "latent_w": w,
+         "latent": T(np.zeros((1, 16, 1, h, w), dtype=np.float32))},
+        {"kind": "video", "latent_t": 2, "latent_h": h, "latent_w": w,
+         "ref_audio_t": 0,
+         "latent": T(np.zeros((1, 16, 2, h, w), dtype=np.float32))},
+        {"kind": "audio", "ref_audio_t": 3,
+         "audio_latent": T(np.zeros((1, 32, 2, 3), dtype=np.float32))},
+    ]
+    r2v_conditioning = [["c", {"minimax_refs": r2v_refs}]]
     out, trim = node.apply(
-        conditioning=[["c", {}]], vae=VAE(), latent=target,
+        conditioning=r2v_conditioning, vae=VAE(), latent=target,
         context_frames=context, context_length=22, encode_mode="video",
         anchor_mode="head", crop="disabled", audio_context_length=22,
         audio_mode="timeline", context_latent=prev)
@@ -176,7 +201,12 @@ def main():
     assert captured["minimax_frame_count"] == frames
     assert trim == 22
 
-    ref = captured["minimax_refs"][0]
+    refs = captured["minimax_refs"]
+    assert refs[:3] == r2v_refs
+    assert len(refs) == 4
+    assert out[0][1]["minimax_refs"] == refs
+    assert r2v_conditioning[0][1]["minimax_refs"] == r2v_refs  # no mutation
+    ref = refs[-1]
     assert ref["kind"] == "audio"
     assert ref["ref_audio_t"] == 37, ref["ref_audio_t"]  # round(22/24*40)
     tail = ref["audio_latent"]
@@ -189,9 +219,9 @@ def main():
     got_end = ref[nodes.MC_AUDIO_KEY]
     assert abs(got_end - want_end) < 1e-9, (got_end, want_end)
     assert abs(got_end - 22.2) < 1e-6, got_end
-    print("latent path: 7 cond blocks at %s, audio 37 steps sliced from "
-          "latent tail, end_frame %.4f (overhang-compensated)" %
-          (idx, got_end))
+    print("Ref2VA latent path: image/video/audio refs preserved + MC audio; "
+          "7 cond blocks at %s, audio 37 steps sliced from latent tail, "
+          "end_frame %.4f (overhang-compensated)" % (idx, got_end))
 
     # decoded-audio path must still work and carry integer end_frame
     captured.clear()

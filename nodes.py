@@ -2,7 +2,7 @@
 
 Wire it between a stock H3 conditioning node and the sampler:
 
-    MiniMaxH3ImageToVideo (or the t2v path)
+    MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo (or the t2v path)
         -> H3 Motion Context
         -> guider / sampler
 
@@ -366,6 +366,7 @@ class MiniMaxH3MotionContext:
         }
 
         ref_audio_t = 0
+        motion_context_audio_ref = None
         a_frames = 0
         audio_src = "off"
         if context_latent is not None or context_audio is not None:
@@ -412,9 +413,20 @@ class MiniMaxH3MotionContext:
                 end_frame = float(span if anchor_mode == "head" else 0)
                 end_frame += overhang / FRAME_RESCALE
                 ref[MC_AUDIO_KEY] = end_frame
-            values["minimax_refs"] = [ref]
+            # Ref2VA multi-ref compatibility design contributed by seitanism
+            # in the Banodoco MiniMax H3 seamless-extension thread.
+            # Keep this separate until after the keyframe values are applied.
+            # ReferenceToVideo conditioning may already contain image, video,
+            # and/or audio refs; assigning minimax_refs in `values` would
+            # replace all of them. Appending also guarantees that the marked
+            # Motion Context audio block is last, which _fixup_audio relies on
+            # to locate its slot in a multi-ref layout.
+            motion_context_audio_ref = ref
 
         out = node_helpers.conditioning_set_values(conditioning, values)
+        if motion_context_audio_ref is not None:
+            out = node_helpers.conditioning_set_values(
+                out, {"minimax_refs": [motion_context_audio_ref]}, append=True)
 
         trim = span if anchor_mode == "head" else 0
         _LOG.info("h3_motion_context: %s/%s, %d frames -> %d cond blocks at "

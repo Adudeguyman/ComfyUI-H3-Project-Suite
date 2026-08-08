@@ -118,7 +118,7 @@ def _fixup(layout, text_len, latent_t, frame_count, keyframes, refs=None):
 
 
 def _fixup_audio(layout, text_len, refs):
-    """Move the audio ref rows' time coordinates onto the target timeline.
+    """Move the marked audio ref rows onto the target timeline.
 
     Refs and keyframes carry identical row machinery; what makes the model
     read a ref as "a separate clip to imitate" rather than "this clip,
@@ -135,8 +135,8 @@ def _fixup_audio(layout, text_len, refs):
     step factor, fractional offsets), so nothing about the block's
     internals is assumed.
 
-    The ref still advances the layout cursor, so its old coordinate slot
-    [text_len, text_len + rt) is left VACANT after the move. An audio
+    The ref still advances the layout cursor, so its old coordinate slot is
+    left VACANT after the move. An audio
     window longer than the video window therefore spills backwards into
     empty coordinate space rather than onto the text rows -- the collision
     that made `before` mode fail for video does not arise here.
@@ -144,14 +144,28 @@ def _fixup_audio(layout, text_len, refs):
     Row selection is by coordinate range (the vacated slot), excluding
     cond segments explicitly so a stock first-frame keyframe sitting at
     text_len can never be swept up regardless of fixup order.
+
+    Multi-ref support here is based on the compatibility patch contributed by
+    seitanism in the Banodoco MiniMax H3 seamless-extension thread.
+    Ordinary Ref2VA blocks may precede the marked Motion Context audio ref.
+    The marked block must be last: the node appends it after the incoming
+    conditioning refs, and this gives the target and keyframes one common
+    final cursor origin.
     """
-    marked = [r for r in refs if r.get(MC_AUDIO_KEY) is not None]
-    if len(refs) != 1 or len(marked) != 1:
+    marked_idx = [i for i, r in enumerate(refs)
+                  if r.get(MC_AUDIO_KEY) is not None]
+    if len(marked_idx) != 1:
         raise RuntimeError(
-            "h3_motion_context: audio timeline placement supports exactly one "
-            "ref block, the marked audio ref; layout has %d refs, %d marked."
-            % (len(refs), len(marked)))
-    blk = marked[0]
+            "h3_motion_context: audio timeline placement requires exactly one "
+            "ref marked with %s; layout has %d refs, %d marked."
+            % (MC_AUDIO_KEY, len(refs), len(marked_idx)))
+    idx = marked_idx[0]
+    if idx != len(refs) - 1:
+        raise RuntimeError(
+            "h3_motion_context: the marked Motion Context audio ref must be "
+            "the last ref block. Apply Motion Context after the stock MiniMax "
+            "H3 conditioning node so existing refs are preserved first.")
+    blk = refs[idx]
     if blk.get("kind") != "audio":
         raise RuntimeError(
             "h3_motion_context: %s set on a %r ref; only audio refs can be "
@@ -159,22 +173,28 @@ def _fixup_audio(layout, text_len, refs):
     rt = int(blk.get("ref_audio_t", 0))
     if rt <= 0:
         return
-    end_frame = float(blk[MC_AUDIO_KEY])
+    prefix = _ref_cursor_advance(refs[:idx])
+    slot_start = float(text_len) + prefix
+    slot_end = slot_start + float(rt)
     target_origin = float(text_len) + _ref_cursor_advance(refs)
+    end_frame = float(blk[MC_AUDIO_KEY])
 
     t = layout.position_ids[:, 0]
-    sel = (t >= float(text_len) - 1e-4) & (t < float(text_len) + rt - 1e-4)
+    sel = (t >= slot_start - 1e-4) & (t < slot_end - 1e-4)
     for a, b, kind in layout.segments:
         if kind == "cond":
             sel[a:b] = False
     count = int(sel.sum())
     if count < rt or count > 8 * rt:
         raise RuntimeError(
-            "h3_motion_context: found %d rows in the audio ref's coordinate "
-            "slot for %d latent steps, expected between %d and %d. Upstream "
-            "layout change; refusing to move audio rows." % (count, rt, rt, 8 * rt))
+            "h3_motion_context: found %d rows in the marked audio ref slot "
+            "[%.4f, %.4f) for %d latent steps, expected between %d and %d. "
+            "Upstream layout change or overlapping coordinates; refusing to "
+            "move audio rows."
+            % (count, slot_start, slot_end, rt, rt, 8 * rt))
     # window end at target time FRAME_RESCALE * end_frame, width rt steps
-    shift = (target_origin + mm.FRAME_RESCALE * end_frame - rt) - float(text_len)
+    desired_start = target_origin + mm.FRAME_RESCALE * end_frame - float(rt)
+    shift = desired_start - slot_start
     layout.position_ids[sel, 0] = t[sel] + shift
 
 
@@ -311,6 +331,65 @@ def _self_test():
     if any(abs(dd - want_shift) > 1e-5 for dd in deltas):
         raise RuntimeError("audio rows shifted non-uniformly or by the wrong "
                            "amount: %s vs %.6f" % (deltas[:4], want_shift))
+
+    # Ref2VA compatibility: ordinary image and audio refs remain byte-identical
+    # while the final marked Motion Context audio block moves onto the target
+    # timeline. The extra ordinary audio block covers the optional full-clip
+    # audio reference used by Ref2VA workflows.
+    img1 = {"kind": "image", "latent_h": lh, "latent_w": lw}
+    img2 = {"kind": "image", "latent_h": lh, "latent_w": lw}
+    existing_audio = {"kind": "audio", "ref_audio_t": 3}
+    audio_plain = {"kind": "audio", "ref_audio_t": rt}
+    audio_marked = {"kind": "audio", "ref_audio_t": rt,
+                    MC_AUDIO_KEY: end_frame}
+    refs_plain = [img1, img2, existing_audio, audio_plain]
+    refs_marked = [img1, img2, existing_audio, audio_marked]
+
+    f = mm.PackedLayout.__new__(mm.PackedLayout)
+    _orig_init(f, text_len, latent_t, lh, lw, audio_t,
+               keyframes=run, refs=refs_plain, frame_count=frame_count)
+    _fixup(f, text_len, latent_t, frame_count, run, refs=refs_plain)
+
+    g = mm.PackedLayout.__new__(mm.PackedLayout)
+    _orig_init(g, text_len, latent_t, lh, lw, audio_t,
+               keyframes=run, refs=refs_marked, frame_count=frame_count)
+    _fixup(g, text_len, latent_t, frame_count, run, refs=refs_marked)
+    _fixup_audio(g, text_len, refs_marked)
+
+    if g.position_ids.shape != f.position_ids.shape:
+        raise RuntimeError("multi-ref audio move changed the layout shape")
+    if not torch.equal(f.position_ids[:, 1:], g.position_ids[:, 1:]):
+        raise RuntimeError("multi-ref audio move touched a non-time coordinate")
+
+    tf, tg = f.position_ids[:, 0], g.position_ids[:, 0]
+    prefix = _ref_cursor_advance(refs_plain[:-1])
+    slot_start = float(text_len) + prefix
+    slot_end = slot_start + float(rt)
+    cond_rows = set()
+    for a, b, kind in f.segments:
+        if kind == "cond":
+            cond_rows.update(range(a, b))
+    expect_moved = set(
+        i for i in range(len(tf))
+        if slot_start - 1e-4 <= float(tf[i]) < slot_end - 1e-4
+        and i not in cond_rows)
+    moved = set(i for i in range(len(tf)) if float(tf[i]) != float(tg[i]))
+    if moved != expect_moved:
+        raise RuntimeError(
+            "multi-ref audio move touched the wrong rows: %d moved, %d "
+            "expected, e.g. %s" %
+            (len(moved), len(expect_moved), sorted(moved ^ expect_moved)[:8]))
+    if not moved:
+        raise RuntimeError("multi-ref audio move moved no rows")
+
+    target_origin = float(text_len) + _ref_cursor_advance(refs_marked)
+    desired_start = target_origin + mm.FRAME_RESCALE * end_frame - float(rt)
+    want_multi_shift = desired_start - slot_start
+    multi_deltas = [float(tg[i]) - float(tf[i]) for i in sorted(moved)]
+    if any(abs(dd - want_multi_shift) > 1e-5 for dd in multi_deltas):
+        raise RuntimeError(
+            "multi-ref audio rows shifted non-uniformly or by the wrong "
+            "amount: %s vs %.6f" % (multi_deltas[:4], want_multi_shift))
 
 
 def apply_patch():

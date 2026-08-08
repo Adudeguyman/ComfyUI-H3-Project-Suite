@@ -1,0 +1,7850 @@
+{
+  "id": "76b5f713-5824-40ae-a2b7-f02ad62c256c",
+  "revision": 0,
+  "last_node_id": 925,
+  "last_link_id": 208,
+  "nodes": [
+    {
+      "id": 900,
+      "type": "Note",
+      "pos": [
+        -3200,
+        -1000
+      ],
+      "size": [
+        650,
+        500
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note",
+        "Workflow credit": "seitanism — Banodoco MiniMax H3 seamless-extension thread"
+      },
+      "widgets_values": [
+        "H3 SEAMLESS CHAIN — GLOBAL REFS + MOTION CONTEXT 39/39\n\nACTIVE BY DEFAULT\n• Clip 1 = Ref2VA start using GLOBAL CHARACTER REFS\n• Clip 2 = Ref2VA + Motion Context continuation\n\nOPTIONAL\n• Clip 3 and Clips 4–6 are present but bypassed.\n• Use the Fast Groups Bypasser panel to activate them SEQUENTIALLY:\n  Clip 3 → Clip 4 → Clip 5 → Clip 6.\n• Do not activate Clip 5 unless Clip 4 is active, etc.\n\nGLOBAL CHARACTER REFS\n• Select two images in the purple GLOBAL CHARACTER REFS group before queueing.\n• Ref 1 = face / identity.\n• Ref 2 = full body / wardrobe of the SAME character.\n• Both references are wired into every clip as <Picture 1> and <Picture 2>.\n\nMODELS / COMPATIBILITY\n• Video model = minimax_h3_ref2va_pruned_int8_convrot.safetensors\n• Text encoder = qwen3vl_32b_minimax_h3_int8_convrot.safetensors\n• Requires this H3 Motion Context node pack; multi-ref timeline-audio compatibility is built in.\n• Compatibility fix and workflow by seitanism in the Banodoco MiniMax H3 thread.\n• Do not run the separately posted V2 patch script with this version.\n\nPREVIEWS\n• Each clip uses VHS Video Combine with save_output = false.\n• VHS writes preview media only to ComfyUI's temp directory, not output.\n• H.264 is used because browser preview is more reliable than H.265.\n\nNO PNG GALLERIES\n• No SaveImage nodes are used.\n• The chain uses raw IMAGE/AUDIO tensors directly, so PNG files are unnecessary.\n\nFINAL\n• The final VHS node concatenates decoded image/audio tensors first,\n  then saves ONE H.264 MP4 in output/.\n\nGLOBAL DEFAULTS\n• Duration = 15 sec raw H3 target per clip.\n• Motion Context overlap = 39 frames (~1.625 sec), so each continuation\n  contributes roughly 13.4 sec of NEW footage after trimming.\n• Audio timeline context = 39 frames.\n• Resolution = 0.5 MP, 16:9, rounded to multiple of 32.\n\nOPTIONAL FULL PREVIOUS AUDIO REF\n• A separate red experimental section can feed each previous clip's ENTIRE delivered audio into the next Ref2VA clip.\n• Use the 'FULL PREVIOUS AUDIO REF — TOGGLE HERE' Fast Groups Muter button.\n• OFF by default.\n• WARNING: this can break seamless audio continuation or make music restart/replay. The tested stable configuration is with this option OFF."
+      ],
+      "title": "READ ME"
+    },
+    {
+      "id": 901,
+      "type": "Fast Groups Bypasser (rgthree)",
+      "pos": [
+        -2500,
+        -1000
+      ],
+      "size": [
+        410,
+        160
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "OPT_CONNECTION",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "properties": {
+        "matchColors": "",
+        "matchTitle": "OPTIONAL EXTENSION",
+        "showNav": true,
+        "showAllGraphs": true,
+        "sort": "position",
+        "customSortAlphabet": "",
+        "toggleRestriction": "default"
+      },
+      "widgets_values": [],
+      "title": "OPTIONAL CLIPS — ACTIVATE HERE"
+    },
+    {
+      "id": 902,
+      "type": "Note",
+      "pos": [
+        -2500,
+        -805
+      ],
+      "size": [
+        410,
+        170
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "The rgthree control is only for convenience.\nNiko recommends the Easy/Fast Group Bypasser for Motion Context chains.\n\nOptional groups are BYPASSED by default.\nTurn them on from left to right only: Clip 3, then 4, then 5, then 6."
+      ],
+      "title": "Optional clip switch instructions"
+    },
+    {
+      "id": 100,
+      "type": "ResolutionSelector",
+      "pos": [
+        -1980,
+        -1000
+      ],
+      "size": [
+        330,
+        190
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            5,
+            26,
+            57,
+            88,
+            119,
+            150
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            6,
+            27,
+            58,
+            89,
+            120,
+            151
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "ResolutionSelector"
+      },
+      "widgets_values": [
+        "16:9 (Widescreen)",
+        0.5,
+        32
+      ],
+      "title": "GLOBAL RESOLUTION — 0.5 MP / ASPECT RATIO",
+      "showAdvanced": true
+    },
+    {
+      "id": 101,
+      "type": "PrimitiveFloat",
+      "pos": [
+        -1980,
+        -760
+      ],
+      "size": [
+        330,
+        80
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "PrimitiveFloat"
+      },
+      "widgets_values": [
+        15.0
+      ],
+      "title": "GLOBAL CLIP DURATION — seconds",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 102,
+      "type": "ComfyMathExpression",
+      "pos": [
+        -1600,
+        -760
+      ],
+      "size": [
+        350,
+        150
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "values.a",
+          "type": "FLOAT,INT,BOOLEAN",
+          "link": 1
+        },
+        {
+          "name": "values.b",
+          "type": "FLOAT,INT,BOOLEAN",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "links": null
+        },
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            7,
+            28,
+            59,
+            90,
+            121,
+            152
+          ]
+        },
+        {
+          "name": "BOOL",
+          "type": "BOOLEAN",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ComfyMathExpression"
+      },
+      "widgets_values": [
+        "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17"
+      ],
+      "title": "H3 VALID FRAME LENGTH (17k+5)"
+    },
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        -1980,
+        -480
+      ],
+      "size": [
+        330,
+        90
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "default"
+      ],
+      "title": "H3 REF2VA MODEL — REQUIRED"
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        -1980,
+        -350
+      ],
+      "size": [
+        330,
+        110
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            3,
+            24,
+            55,
+            86,
+            117,
+            148
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+        "minimax",
+        "default"
+      ],
+      "title": "H3 TEXT ENCODER"
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        -1980,
+        -200
+      ],
+      "size": [
+        330,
+        70
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            4,
+            17,
+            25,
+            30,
+            43,
+            56,
+            61,
+            74,
+            87,
+            92,
+            105,
+            118,
+            123,
+            136,
+            149,
+            154,
+            167
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ],
+      "title": "H3 Video VAE"
+    },
+    {
+      "id": 4,
+      "type": "VAELoader",
+      "pos": [
+        -1980,
+        -90
+      ],
+      "size": [
+        330,
+        70
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            19,
+            45,
+            76,
+            107,
+            138,
+            169,
+            181,
+            184,
+            187,
+            190,
+            193,
+            196
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "title": "H3 Audio VAE"
+    },
+    {
+      "id": 5,
+      "type": "MiniMaxH3SigmaShift",
+      "pos": [
+        -1570,
+        -480
+      ],
+      "size": [
+        300,
+        150
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            8,
+            13,
+            34,
+            39,
+            65,
+            70,
+            96,
+            101,
+            127,
+            132,
+            158,
+            163
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3SigmaShift"
+      },
+      "widgets_values": [
+        12,
+        3
+      ]
+    },
+    {
+      "id": 110,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        -1100,
+        -880
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 4
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 181
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 182
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 183
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 5,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 6,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 7,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Generate the opening segment with <Subject 1> fully consistent with the two character references while following the requested scene and action.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; pose, expression, lighting, framing, and action follow the scene description.\n\ndetailed_description:\n[Shot 1] [DESCRIBE THE STARTING VIDEO. End with subject motion, camera movement, ongoing action, ambience, and music still clearly in progress.]\n\noverall_soundscape:\n[DESCRIBE CONTINUOUS AMBIENCE / PHYSICAL SOUNDS.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 1 — START WITH GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 120,
+      "type": "RandomNoise",
+      "pos": [
+        -540,
+        -840
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        123456789,
+        "randomize"
+      ]
+    },
+    {
+      "id": 121,
+      "type": "BasicGuider",
+      "pos": [
+        -540,
+        -725
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 8
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 122,
+      "type": "KSamplerSelect",
+      "pos": [
+        -540,
+        -630
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 123,
+      "type": "BasicScheduler",
+      "pos": [
+        -540,
+        -535
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 124,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        -200,
+        -730
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 10
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 11
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 12
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 14
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            16,
+            18,
+            33
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 1 Sampler"
+    },
+    {
+      "id": 130,
+      "type": "VAEDecode",
+      "pos": [
+        -80,
+        -760
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 16
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 17
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            20
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 1 Frames"
+    },
+    {
+      "id": 131,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        -80,
+        -650
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 18
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 19
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 1 Audio"
+    },
+    {
+      "id": 132,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        240,
+        -740
+      ],
+      "size": [
+        330,
+        170
+      ],
+      "flags": {},
+      "order": 28,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 20
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 21,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            22,
+            32,
+            51
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            23,
+            53,
+            199
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "Clip 1 — match audio tail only",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 133,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        650,
+        -770
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 22
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 23,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip01",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 1 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 200,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        1250,
+        -900
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 40,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 24
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 25
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 184
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 185
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 186
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 200
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 26,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 27,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 28,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            29
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            31,
+            41
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Continue the existing scene and motion without resetting anything, while keeping <Subject 1> fully consistent with the two character references whenever visible or when re-entering the frame.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1] whenever visible): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; do not copy their pose, expression, framing, or background. Match the incoming visual state from the carried motion context and do not visibly re-resolve or beautify the face right at the continuation boundary.\n\ndetailed_description:\n[Shot 1] The existing subject motion, camera trajectory, physical momentum, and ongoing action continue uninterrupted from the preceding clip. Preserve continuity with the incoming visual state, lighting, facial texture, sharpness, and rendering character from the carried motion context. [DESCRIBE WHAT HAPPENS NEXT; DO NOT RESTART FROM REST. If <Subject 1> re-enters after being off-screen, restore the same referenced identity naturally.]\n\noverall_soundscape:\nThe existing ambience and ongoing sound continue across the join without a fresh start. If the optional full previous-clip audio reference is enabled, use it only as a broad sonic-identity reference; do not replay, restart, or copy its temporal progression. [DESCRIBE NEW SOUND CHANGES CAUSED BY THE CONTINUING ACTION.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 2 — CONTINUATION + GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 201,
+      "type": "MiniMaxH3MotionContext",
+      "pos": [
+        1770,
+        -900
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 41,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 29
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 30
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 31
+        },
+        {
+          "name": "context_frames",
+          "type": "IMAGE",
+          "link": 32
+        },
+        {
+          "name": "context_latent",
+          "type": "LATENT",
+          "link": 33,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "context_length"
+          }
+        },
+        {
+          "name": "audio_context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "audio_context_length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            35
+          ]
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            48
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContext"
+      },
+      "widgets_values": [
+        39,
+        "video",
+        "head",
+        "disabled",
+        39,
+        "timeline"
+      ],
+      "title": "Clip 2 Motion Context — 39 / video / head / 39 / timeline",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 210,
+      "type": "RandomNoise",
+      "pos": [
+        2200,
+        -940
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 42,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            36
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        7679011,
+        "randomize"
+      ]
+    },
+    {
+      "id": 211,
+      "type": "BasicGuider",
+      "pos": [
+        2200,
+        -825
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 43,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 34
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 35
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            37
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 212,
+      "type": "KSamplerSelect",
+      "pos": [
+        2200,
+        -730
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 44,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            38
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 213,
+      "type": "BasicScheduler",
+      "pos": [
+        2200,
+        -635
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 45,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 39
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 214,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        2540,
+        -830
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 46,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 36
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 37
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 38
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 40
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 41
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            42,
+            44,
+            64
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 2 Sampler"
+    },
+    {
+      "id": 220,
+      "type": "VAEDecode",
+      "pos": [
+        2850,
+        -860
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 47,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 42
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 43
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            46
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 2 Frames"
+    },
+    {
+      "id": 221,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        2850,
+        -755
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 48,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 44
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 45
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            47
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 2 Audio"
+    },
+    {
+      "id": 222,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        3170,
+        -850
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 49,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 46
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 47,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": 48,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            49,
+            52,
+            63
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            50,
+            54,
+            201
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "CLIP 2 — REMOVE 22f OVERLAP + MATCH AUDIO TAIL",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 223,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        3570,
+        -890
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 50,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 49
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 50,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip02",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 2 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 230,
+      "type": "ImageBatch",
+      "pos": [
+        3570,
+        -550
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 51,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 51
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 52
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            82
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "CUMULATIVE FRAMES through Clip 2"
+    },
+    {
+      "id": 231,
+      "type": "AudioConcat",
+      "pos": [
+        3570,
+        -430
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 52,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO",
+          "link": 53
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO",
+          "link": 54
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            84
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "AudioConcat"
+      },
+      "widgets_values": [
+        "after"
+      ],
+      "title": "CUMULATIVE AUDIO through Clip 2"
+    },
+    {
+      "id": 300,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        1250,
+        -50
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 60,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 55
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 56
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 187
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 188
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 189
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 202
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 57,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 58,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 59,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            60
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            62,
+            72
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Continue the existing scene and motion without resetting anything, while keeping <Subject 1> fully consistent with the two character references whenever visible or when re-entering the frame.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1] whenever visible): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; do not copy their pose, expression, framing, or background. Match the incoming visual state from the carried motion context and do not visibly re-resolve or beautify the face right at the continuation boundary.\n\ndetailed_description:\n[Shot 1] The existing subject motion, camera trajectory, physical momentum, and ongoing action continue uninterrupted from the preceding clip. Preserve continuity with the incoming visual state, lighting, facial texture, sharpness, and rendering character from the carried motion context. [DESCRIBE WHAT HAPPENS NEXT; DO NOT RESTART FROM REST. If <Subject 1> re-enters after being off-screen, restore the same referenced identity naturally.]\n\noverall_soundscape:\nThe existing ambience and ongoing sound continue across the join without a fresh start. If the optional full previous-clip audio reference is enabled, use it only as a broad sonic-identity reference; do not replay, restart, or copy its temporal progression. [DESCRIBE NEW SOUND CHANGES CAUSED BY THE CONTINUING ACTION.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 3 — CONTINUATION + GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 301,
+      "type": "MiniMaxH3MotionContext",
+      "pos": [
+        1770,
+        -50
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 61,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 60
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 61
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 62
+        },
+        {
+          "name": "context_frames",
+          "type": "IMAGE",
+          "link": 63
+        },
+        {
+          "name": "context_latent",
+          "type": "LATENT",
+          "link": 64,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "context_length"
+          }
+        },
+        {
+          "name": "audio_context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "audio_context_length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            66
+          ]
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            79
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContext"
+      },
+      "widgets_values": [
+        39,
+        "video",
+        "head",
+        "disabled",
+        39,
+        "timeline"
+      ],
+      "title": "Clip 3 Motion Context — 39 / video / head / 39 / timeline",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 310,
+      "type": "RandomNoise",
+      "pos": [
+        2200,
+        -90
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 62,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            67
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        7691356,
+        "randomize"
+      ]
+    },
+    {
+      "id": 311,
+      "type": "BasicGuider",
+      "pos": [
+        2200,
+        25
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 63,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 65
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 66
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            68
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 312,
+      "type": "KSamplerSelect",
+      "pos": [
+        2200,
+        120
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 64,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            69
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 313,
+      "type": "BasicScheduler",
+      "pos": [
+        2200,
+        215
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 65,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 70
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            71
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 314,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        2540,
+        20
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 66,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 67
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 68
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 69
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 71
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 72
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            73,
+            75,
+            95
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 3 Sampler"
+    },
+    {
+      "id": 320,
+      "type": "VAEDecode",
+      "pos": [
+        2850,
+        -10
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 67,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 73
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 74
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            77
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 3 Frames"
+    },
+    {
+      "id": 321,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        2850,
+        95
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 68,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 75
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 76
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            78
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 3 Audio"
+    },
+    {
+      "id": 322,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        3170,
+        0
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 69,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 77
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 78,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": 79,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            80,
+            83,
+            94
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            81,
+            85,
+            203
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "CLIP 3 — REMOVE 22f OVERLAP + MATCH AUDIO TAIL",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 323,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        3570,
+        -40
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 70,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 80
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 81,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip03",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 3 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 330,
+      "type": "ImageBatch",
+      "pos": [
+        3570,
+        300
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 71,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 82
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 83
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            113
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "CUMULATIVE FRAMES through Clip 3"
+    },
+    {
+      "id": 331,
+      "type": "AudioConcat",
+      "pos": [
+        3570,
+        420
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 72,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO",
+          "link": 84
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO",
+          "link": 85
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            115
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "AudioConcat"
+      },
+      "widgets_values": [
+        "after"
+      ],
+      "title": "CUMULATIVE AUDIO through Clip 3"
+    },
+    {
+      "id": 400,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        1250,
+        800
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 80,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 86
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 87
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 190
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 191
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 192
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 204
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 88,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 89,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 90,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            91
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            93,
+            103
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Continue the existing scene and motion without resetting anything, while keeping <Subject 1> fully consistent with the two character references whenever visible or when re-entering the frame.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1] whenever visible): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; do not copy their pose, expression, framing, or background. Match the incoming visual state from the carried motion context and do not visibly re-resolve or beautify the face right at the continuation boundary.\n\ndetailed_description:\n[Shot 1] The existing subject motion, camera trajectory, physical momentum, and ongoing action continue uninterrupted from the preceding clip. Preserve continuity with the incoming visual state, lighting, facial texture, sharpness, and rendering character from the carried motion context. [DESCRIBE WHAT HAPPENS NEXT; DO NOT RESTART FROM REST. If <Subject 1> re-enters after being off-screen, restore the same referenced identity naturally.]\n\noverall_soundscape:\nThe existing ambience and ongoing sound continue across the join without a fresh start. If the optional full previous-clip audio reference is enabled, use it only as a broad sonic-identity reference; do not replay, restart, or copy its temporal progression. [DESCRIBE NEW SOUND CHANGES CAUSED BY THE CONTINUING ACTION.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 4 — CONTINUATION + GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 401,
+      "type": "MiniMaxH3MotionContext",
+      "pos": [
+        1770,
+        800
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 81,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 91
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 92
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 93
+        },
+        {
+          "name": "context_frames",
+          "type": "IMAGE",
+          "link": 94
+        },
+        {
+          "name": "context_latent",
+          "type": "LATENT",
+          "link": 95,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "context_length"
+          }
+        },
+        {
+          "name": "audio_context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "audio_context_length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            97
+          ]
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            110
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContext"
+      },
+      "widgets_values": [
+        39,
+        "video",
+        "head",
+        "disabled",
+        39,
+        "timeline"
+      ],
+      "title": "Clip 4 Motion Context — 39 / video / head / 39 / timeline",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 410,
+      "type": "RandomNoise",
+      "pos": [
+        2200,
+        760
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 82,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            98
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        7703701,
+        "randomize"
+      ]
+    },
+    {
+      "id": 411,
+      "type": "BasicGuider",
+      "pos": [
+        2200,
+        875
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 83,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 96
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 97
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            99
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 412,
+      "type": "KSamplerSelect",
+      "pos": [
+        2200,
+        970
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 84,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            100
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 413,
+      "type": "BasicScheduler",
+      "pos": [
+        2200,
+        1065
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 85,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 101
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            102
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 414,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        2540,
+        870
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 86,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 98
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 99
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 100
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 102
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 103
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            104,
+            106,
+            126
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 4 Sampler"
+    },
+    {
+      "id": 420,
+      "type": "VAEDecode",
+      "pos": [
+        2850,
+        840
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 87,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 104
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 105
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            108
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 4 Frames"
+    },
+    {
+      "id": 421,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        2850,
+        945
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 88,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 106
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 107
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            109
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 4 Audio"
+    },
+    {
+      "id": 422,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        3170,
+        850
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 89,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 108
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 109,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": 110,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            111,
+            114,
+            125
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            112,
+            116,
+            205
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "CLIP 4 — REMOVE 22f OVERLAP + MATCH AUDIO TAIL",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 423,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        3570,
+        810
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 111
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 112,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip04",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 4 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 430,
+      "type": "ImageBatch",
+      "pos": [
+        3570,
+        1150
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 91,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 113
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 114
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            144
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "CUMULATIVE FRAMES through Clip 4"
+    },
+    {
+      "id": 431,
+      "type": "AudioConcat",
+      "pos": [
+        3570,
+        1270
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 92,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO",
+          "link": 115
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO",
+          "link": 116
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            146
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "AudioConcat"
+      },
+      "widgets_values": [
+        "after"
+      ],
+      "title": "CUMULATIVE AUDIO through Clip 4"
+    },
+    {
+      "id": 500,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        1250,
+        1650
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 100,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 117
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 118
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 193
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 194
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 195
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 206
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 119,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 120,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 121,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            122
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            124,
+            134
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Continue the existing scene and motion without resetting anything, while keeping <Subject 1> fully consistent with the two character references whenever visible or when re-entering the frame.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1] whenever visible): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; do not copy their pose, expression, framing, or background. Match the incoming visual state from the carried motion context and do not visibly re-resolve or beautify the face right at the continuation boundary.\n\ndetailed_description:\n[Shot 1] The existing subject motion, camera trajectory, physical momentum, and ongoing action continue uninterrupted from the preceding clip. Preserve continuity with the incoming visual state, lighting, facial texture, sharpness, and rendering character from the carried motion context. [DESCRIBE WHAT HAPPENS NEXT; DO NOT RESTART FROM REST. If <Subject 1> re-enters after being off-screen, restore the same referenced identity naturally.]\n\noverall_soundscape:\nThe existing ambience and ongoing sound continue across the join without a fresh start. If the optional full previous-clip audio reference is enabled, use it only as a broad sonic-identity reference; do not replay, restart, or copy its temporal progression. [DESCRIBE NEW SOUND CHANGES CAUSED BY THE CONTINUING ACTION.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 5 — CONTINUATION + GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 501,
+      "type": "MiniMaxH3MotionContext",
+      "pos": [
+        1770,
+        1650
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 101,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 122
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 123
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 124
+        },
+        {
+          "name": "context_frames",
+          "type": "IMAGE",
+          "link": 125
+        },
+        {
+          "name": "context_latent",
+          "type": "LATENT",
+          "link": 126,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "context_length"
+          }
+        },
+        {
+          "name": "audio_context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "audio_context_length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            128
+          ]
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            141
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContext"
+      },
+      "widgets_values": [
+        39,
+        "video",
+        "head",
+        "disabled",
+        39,
+        "timeline"
+      ],
+      "title": "Clip 5 Motion Context — 39 / video / head / 39 / timeline",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 510,
+      "type": "RandomNoise",
+      "pos": [
+        2200,
+        1610
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 102,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            129
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        7716046,
+        "randomize"
+      ]
+    },
+    {
+      "id": 511,
+      "type": "BasicGuider",
+      "pos": [
+        2200,
+        1725
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 103,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 127
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 128
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            130
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 512,
+      "type": "KSamplerSelect",
+      "pos": [
+        2200,
+        1820
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 104,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            131
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 513,
+      "type": "BasicScheduler",
+      "pos": [
+        2200,
+        1915
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 105,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 132
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            133
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 514,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        2540,
+        1720
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 106,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 129
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 130
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 131
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 133
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 134
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            135,
+            137,
+            157
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 5 Sampler"
+    },
+    {
+      "id": 520,
+      "type": "VAEDecode",
+      "pos": [
+        2850,
+        1690
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 107,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 135
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 136
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            139
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 5 Frames"
+    },
+    {
+      "id": 521,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        2850,
+        1795
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 108,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 137
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 138
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            140
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 5 Audio"
+    },
+    {
+      "id": 522,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        3170,
+        1700
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 109,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 139
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 140,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": 141,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            142,
+            145,
+            156
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            143,
+            147,
+            207
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "CLIP 5 — REMOVE 22f OVERLAP + MATCH AUDIO TAIL",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 523,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        3570,
+        1660
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 110,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 142
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 143,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip05",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 5 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 530,
+      "type": "ImageBatch",
+      "pos": [
+        3570,
+        2000
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 111,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 144
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 145
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            175
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "CUMULATIVE FRAMES through Clip 5"
+    },
+    {
+      "id": 531,
+      "type": "AudioConcat",
+      "pos": [
+        3570,
+        2120
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 112,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO",
+          "link": 146
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO",
+          "link": 147
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            177
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "AudioConcat"
+      },
+      "widgets_values": [
+        "after"
+      ],
+      "title": "CUMULATIVE AUDIO through Clip 5"
+    },
+    {
+      "id": 600,
+      "type": "MiniMaxH3ReferenceToVideo",
+      "pos": [
+        1250,
+        2500
+      ],
+      "size": [
+        480,
+        430
+      ],
+      "flags": {},
+      "order": 120,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 148
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 149
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 196
+        },
+        {
+          "label": "ref_image_0",
+          "name": "ref_images.ref_image_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 197
+        },
+        {
+          "label": "ref_image_1",
+          "name": "ref_images.ref_image_1",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 198
+        },
+        {
+          "label": "ref_image_2",
+          "name": "ref_images.ref_image_2",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_0",
+          "name": "ref_videos.ref_video_0",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "label": "ref_video_audio_0",
+          "name": "ref_video_audios.ref_video_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "label": "ref_audio_0",
+          "name": "ref_audios.ref_audio_0",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": 208
+        },
+        {
+          "name": "prompt",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "prompt"
+          }
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "link": 150,
+          "widget": {
+            "name": "width"
+          }
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "link": 151,
+          "widget": {
+            "name": "height"
+          }
+        },
+        {
+          "name": "length",
+          "type": "INT",
+          "link": 152,
+          "widget": {
+            "name": "length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            153
+          ]
+        },
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            155,
+            165
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "MiniMaxH3ReferenceToVideo"
+      },
+      "widgets_values": [
+        "subject_definitions:\n<Subject 1> is the same character defined jointly by <Picture 1> for facial identity and <Picture 2> for full-body appearance, wardrobe, proportions, and distinctive details.\n\nsummary:\n[reference generation] Continue the existing scene and motion without resetting anything, while keeping <Subject 1> fully consistent with the two character references whenever visible or when re-entering the frame.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1] whenever visible): fully_preserved - preserve facial identity, hair, body proportions, wardrobe, colors, and distinctive features from <Picture 1> and <Picture 2>; do not copy their pose, expression, framing, or background. Match the incoming visual state from the carried motion context and do not visibly re-resolve or beautify the face right at the continuation boundary.\n\ndetailed_description:\n[Shot 1] The existing subject motion, camera trajectory, physical momentum, and ongoing action continue uninterrupted from the preceding clip. Preserve continuity with the incoming visual state, lighting, facial texture, sharpness, and rendering character from the carried motion context. [DESCRIBE WHAT HAPPENS NEXT; DO NOT RESTART FROM REST. If <Subject 1> re-enters after being off-screen, restore the same referenced identity naturally.]\n\noverall_soundscape:\nThe existing ambience and ongoing sound continue across the join without a fresh start. If the optional full previous-clip audio reference is enabled, use it only as a broad sonic-identity reference; do not replay, restart, or copy its temporal progression. [DESCRIBE NEW SOUND CHANGES CAUSED BY THE CONTINUING ACTION.]\n\nnon_diegetic_music:\nN/A",
+        960,
+        544,
+        362,
+        "match"
+      ],
+      "title": "CLIP 6 — CONTINUATION + GLOBAL REFS",
+      "color": "#346434",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 601,
+      "type": "MiniMaxH3MotionContext",
+      "pos": [
+        1770,
+        2500
+      ],
+      "size": [
+        380,
+        350
+      ],
+      "flags": {},
+      "order": 121,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 153
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 154
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "link": 155
+        },
+        {
+          "name": "context_frames",
+          "type": "IMAGE",
+          "link": 156
+        },
+        {
+          "name": "context_latent",
+          "type": "LATENT",
+          "link": 157,
+          "shape": 7
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_audio",
+          "type": "AUDIO",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "context_length"
+          }
+        },
+        {
+          "name": "audio_context_length",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "audio_context_length"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "links": [
+            159
+          ]
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "links": [
+            172
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContext"
+      },
+      "widgets_values": [
+        39,
+        "video",
+        "head",
+        "disabled",
+        39,
+        "timeline"
+      ],
+      "title": "Clip 6 Motion Context — 39 / video / head / 39 / timeline",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 610,
+      "type": "RandomNoise",
+      "pos": [
+        2200,
+        2460
+      ],
+      "size": [
+        270,
+        90
+      ],
+      "flags": {},
+      "order": 122,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "NOISE",
+          "type": "NOISE",
+          "links": [
+            160
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "RandomNoise"
+      },
+      "widgets_values": [
+        7728391,
+        "randomize"
+      ]
+    },
+    {
+      "id": 611,
+      "type": "BasicGuider",
+      "pos": [
+        2200,
+        2575
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 123,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 158
+        },
+        {
+          "name": "conditioning",
+          "type": "CONDITIONING",
+          "link": 159
+        }
+      ],
+      "outputs": [
+        {
+          "name": "GUIDER",
+          "type": "GUIDER",
+          "links": [
+            161
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicGuider"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 612,
+      "type": "KSamplerSelect",
+      "pos": [
+        2200,
+        2670
+      ],
+      "size": [
+        270,
+        70
+      ],
+      "flags": {},
+      "order": 124,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "SAMPLER",
+          "type": "SAMPLER",
+          "links": [
+            162
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "KSamplerSelect"
+      },
+      "widgets_values": [
+        "res_multistep"
+      ]
+    },
+    {
+      "id": 613,
+      "type": "BasicScheduler",
+      "pos": [
+        2200,
+        2765
+      ],
+      "size": [
+        270,
+        110
+      ],
+      "flags": {},
+      "order": 125,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 163
+        }
+      ],
+      "outputs": [
+        {
+          "name": "SIGMAS",
+          "type": "SIGMAS",
+          "links": [
+            164
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "BasicScheduler"
+      },
+      "widgets_values": [
+        "simple",
+        20,
+        1
+      ]
+    },
+    {
+      "id": 614,
+      "type": "SamplerCustomAdvanced",
+      "pos": [
+        2540,
+        2570
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "flags": {},
+      "order": 126,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "noise",
+          "type": "NOISE",
+          "link": 160
+        },
+        {
+          "name": "guider",
+          "type": "GUIDER",
+          "link": 161
+        },
+        {
+          "name": "sampler",
+          "type": "SAMPLER",
+          "link": 162
+        },
+        {
+          "name": "sigmas",
+          "type": "SIGMAS",
+          "link": 164
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 165
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "LATENT",
+          "links": [
+            166,
+            168
+          ]
+        },
+        {
+          "name": "denoised_output",
+          "type": "LATENT",
+          "links": []
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "SamplerCustomAdvanced"
+      },
+      "widgets_values": [],
+      "title": "Clip 6 Sampler"
+    },
+    {
+      "id": 620,
+      "type": "VAEDecode",
+      "pos": [
+        2850,
+        2540
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 127,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 166
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 167
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            170
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": [],
+      "title": "Clip 6 Frames"
+    },
+    {
+      "id": 621,
+      "type": "VAEDecodeAudio",
+      "pos": [
+        2850,
+        2645
+      ],
+      "size": [
+        240,
+        70
+      ],
+      "flags": {},
+      "order": 128,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 168
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 169
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            171
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "VAEDecodeAudio"
+      },
+      "widgets_values": [],
+      "title": "Clip 6 Audio"
+    },
+    {
+      "id": 622,
+      "type": "MiniMaxH3MotionContextTrim",
+      "pos": [
+        3170,
+        2550
+      ],
+      "size": [
+        340,
+        180
+      ],
+      "flags": {},
+      "order": 129,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 170
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 171,
+          "shape": 7
+        },
+        {
+          "name": "trim_frames",
+          "type": "INT",
+          "link": 172,
+          "widget": {
+            "name": "trim_frames"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            173,
+            176
+          ]
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            174,
+            178
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+      },
+      "widgets_values": [
+        0,
+        24,
+        true
+      ],
+      "title": "CLIP 6 — REMOVE 22f OVERLAP + MATCH AUDIO TAIL",
+      "color": "#1f1f48",
+      "bgcolor": "rgba(24,24,27,.9)"
+    },
+    {
+      "id": 623,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        3570,
+        2510
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 130,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 173
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 174,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_preview/clip06",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 27,
+        "save_metadata": false,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": false,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "CLIP 6 PREVIEW — TEMP ONLY"
+    },
+    {
+      "id": 630,
+      "type": "ImageBatch",
+      "pos": [
+        3570,
+        2850
+      ],
+      "size": [
+        280,
+        90
+      ],
+      "flags": {},
+      "order": 131,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image1",
+          "type": "IMAGE",
+          "link": 175
+        },
+        {
+          "name": "image2",
+          "type": "IMAGE",
+          "link": 176
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            179
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "ImageBatch"
+      },
+      "widgets_values": [],
+      "title": "CUMULATIVE FRAMES through Clip 6"
+    },
+    {
+      "id": 631,
+      "type": "AudioConcat",
+      "pos": [
+        3570,
+        2970
+      ],
+      "size": [
+        280,
+        120
+      ],
+      "flags": {},
+      "order": 132,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "audio1",
+          "type": "AUDIO",
+          "link": 177
+        },
+        {
+          "name": "audio2",
+          "type": "AUDIO",
+          "link": 178
+        }
+      ],
+      "outputs": [
+        {
+          "name": "AUDIO",
+          "type": "AUDIO",
+          "links": [
+            180
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.30.0",
+        "Node name for S&R": "AudioConcat"
+      },
+      "widgets_values": [
+        "after"
+      ],
+      "title": "CUMULATIVE AUDIO through Clip 6"
+    },
+    {
+      "id": 800,
+      "type": "VHS_VideoCombine",
+      "pos": [
+        4150,
+        2520
+      ],
+      "size": [
+        420,
+        300
+      ],
+      "flags": {},
+      "order": 200,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 179
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 180,
+          "shape": 7
+        },
+        {
+          "name": "meta_batch",
+          "type": "VHS_BatchManager",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": null,
+          "shape": 7
+        },
+        {
+          "name": "frame_rate",
+          "type": "FLOAT",
+          "link": null,
+          "widget": {
+            "name": "frame_rate"
+          }
+        },
+        {
+          "name": "loop_count",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "loop_count"
+          }
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": null,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        },
+        {
+          "name": "format",
+          "type": [
+            "image/gif",
+            "image/webp",
+            "video/h264-mp4"
+          ],
+          "link": null,
+          "widget": {
+            "name": "format"
+          }
+        },
+        {
+          "name": "pingpong",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "pingpong"
+          }
+        },
+        {
+          "name": "save_output",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_output"
+          }
+        },
+        {
+          "name": "pix_fmt",
+          "type": [
+            "yuv420p",
+            "yuv420p10le"
+          ],
+          "link": null,
+          "widget": {
+            "name": "pix_fmt"
+          }
+        },
+        {
+          "name": "crf",
+          "type": "INT",
+          "link": null,
+          "widget": {
+            "name": "crf"
+          }
+        },
+        {
+          "name": "save_metadata",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "save_metadata"
+          }
+        },
+        {
+          "name": "trim_to_audio",
+          "type": "BOOLEAN",
+          "link": null,
+          "widget": {
+            "name": "trim_to_audio"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Filenames",
+          "type": "VHS_FILENAMES",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-videohelpersuite",
+        "ver": "1.7.7",
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": {
+        "frame_rate": 24,
+        "loop_count": 0,
+        "filename_prefix": "h3_chain/final/H3_seamless_chain",
+        "format": "video/h264-mp4",
+        "pix_fmt": "yuv420p",
+        "crf": 19,
+        "save_metadata": true,
+        "trim_to_audio": false,
+        "pingpong": false,
+        "save_output": true,
+        "videopreview": {
+          "hidden": false,
+          "paused": false,
+          "params": {}
+        }
+      },
+      "title": "FINAL STITCHED VIDEO — SAVE + PREVIEW"
+    },
+    {
+      "id": 801,
+      "type": "Note",
+      "pos": [
+        4140,
+        2970
+      ],
+      "size": [
+        520,
+        300
+      ],
+      "flags": {},
+      "order": 201,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note"
+      },
+      "widgets_values": [
+        "FINAL JOIN\n\nThe final video is assembled from raw decoded IMAGE batches + AUDIO tensors.\nNo intermediate MP4 is used as source material.\n\nPreview nodes:\nsave_output = false → temp directory only.\n\nFinal node:\nsave_output = true → output/h3_chain/final/\n\nOPTIONAL CLIPS\nIf Clip 3/4/5/6 are OFF, their cumulative ImageBatch / AudioConcat nodes are bypassed\nand pass the prior cumulative stream forward.\n\nAlways activate optional clips sequentially: 3 → 4 → 5 → 6.\n\nCONTEXT SETTINGS\nAll continuation clips use Motion Context = 39 video frames + 39 timeline-audio frames.\nThe workflow assumes the V2 multi-ref audio patch remains installed.\n\nEXPERIMENTAL FULL AUDIO REF\nThe full-previous-audio reference toggle is OFF by default. Turning it ON may make music restart/replay and can introduce an audible seam. The 39/39 Motion Context continuation remains the recommended baseline."
+      ],
+      "title": "Final output notes"
+    },
+    {
+      "id": 910,
+      "type": "LoadImage",
+      "pos": [
+        -1980,
+        200
+      ],
+      "size": [
+        360,
+        390
+      ],
+      "flags": {},
+      "order": 88,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            182,
+            185,
+            188,
+            191,
+            194,
+            197
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "CHARACTER REF 1 — FACE / IDENTITY",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "",
+        "image"
+      ]
+    },
+    {
+      "id": 911,
+      "type": "LoadImage",
+      "pos": [
+        -1580,
+        200
+      ],
+      "size": [
+        360,
+        390
+      ],
+      "flags": {},
+      "order": 89,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            183,
+            186,
+            189,
+            192,
+            195,
+            198
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "title": "CHARACTER REF 2 — FULL BODY / WARDROBE",
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "",
+        "image"
+      ]
+    },
+    {
+      "id": 912,
+      "type": "Note",
+      "pos": [
+        -1980,
+        620
+      ],
+      "size": [
+        780,
+        230
+      ],
+      "flags": {},
+      "order": 90,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "GLOBAL REFERENCE INSTRUCTIONS",
+      "properties": {},
+      "widgets_values": [
+        "SELECT BOTH IMAGES BEFORE QUEUING.\n\nREF 1 = strongest face / identity image.\nREF 2 = full-body / wardrobe / proportions image of the SAME character.\n\nEvery clip receives both references as <Picture 1> and <Picture 2>.\nThis workflow is designed for the installed V2 Motion Context patch and uses 39 video context frames + 39 timeline-audio frames on every continuation.\nRef image size defaults to MATCH for speed. Change per clip to MAX only if you need stronger identity fidelity."
+      ]
+    },
+    {
+      "id": 920,
+      "type": "Any Switch (rgthree)",
+      "pos": [
+        -970,
+        1030
+      ],
+      "size": [
+        760,
+        200
+      ],
+      "flags": {},
+      "order": 202,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "any_01",
+          "type": "AUDIO",
+          "link": 199
+        },
+        {
+          "name": "any_02",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_03",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_04",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_05",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "AUDIO",
+          "links": [
+            200
+          ]
+        }
+      ],
+      "title": "CLIP 2 ← FULL AUDIO OF CLIP 1",
+      "properties": {
+        "Node name for S&R": "Any Switch (rgthree)"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 921,
+      "type": "Any Switch (rgthree)",
+      "pos": [
+        -970,
+        1310
+      ],
+      "size": [
+        760,
+        200
+      ],
+      "flags": {},
+      "order": 203,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "any_01",
+          "type": "AUDIO",
+          "link": 201
+        },
+        {
+          "name": "any_02",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_03",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_04",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_05",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "AUDIO",
+          "links": [
+            202
+          ]
+        }
+      ],
+      "title": "CLIP 3 ← FULL AUDIO OF CLIP 2",
+      "properties": {
+        "Node name for S&R": "Any Switch (rgthree)"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 922,
+      "type": "Any Switch (rgthree)",
+      "pos": [
+        -970,
+        1590
+      ],
+      "size": [
+        760,
+        200
+      ],
+      "flags": {},
+      "order": 204,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "any_01",
+          "type": "AUDIO",
+          "link": 203
+        },
+        {
+          "name": "any_02",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_03",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_04",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_05",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "AUDIO",
+          "links": [
+            204
+          ]
+        }
+      ],
+      "title": "CLIP 4 ← FULL AUDIO OF CLIP 3",
+      "properties": {
+        "Node name for S&R": "Any Switch (rgthree)"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 923,
+      "type": "Any Switch (rgthree)",
+      "pos": [
+        -970,
+        1870
+      ],
+      "size": [
+        760,
+        200
+      ],
+      "flags": {},
+      "order": 205,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "any_01",
+          "type": "AUDIO",
+          "link": 205
+        },
+        {
+          "name": "any_02",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_03",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_04",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_05",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "AUDIO",
+          "links": [
+            206
+          ]
+        }
+      ],
+      "title": "CLIP 5 ← FULL AUDIO OF CLIP 4",
+      "properties": {
+        "Node name for S&R": "Any Switch (rgthree)"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 924,
+      "type": "Any Switch (rgthree)",
+      "pos": [
+        -970,
+        2150
+      ],
+      "size": [
+        760,
+        200
+      ],
+      "flags": {},
+      "order": 206,
+      "mode": 2,
+      "inputs": [
+        {
+          "name": "any_01",
+          "type": "AUDIO",
+          "link": 207
+        },
+        {
+          "name": "any_02",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_03",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_04",
+          "type": "AUDIO",
+          "link": null
+        },
+        {
+          "name": "any_05",
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "AUDIO",
+          "links": [
+            208
+          ]
+        }
+      ],
+      "title": "CLIP 6 ← FULL AUDIO OF CLIP 5",
+      "properties": {
+        "Node name for S&R": "Any Switch (rgthree)"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 925,
+      "type": "Fast Groups Muter (rgthree)",
+      "pos": [
+        -3200,
+        950
+      ],
+      "size": [
+        650,
+        180
+      ],
+      "flags": {},
+      "order": 207,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "OPT_CONNECTION",
+          "type": "*",
+          "links": null
+        }
+      ],
+      "title": "FULL PREVIOUS AUDIO REF — TOGGLE HERE",
+      "properties": {
+        "matchColors": "",
+        "matchTitle": "OPTIONAL FULL PREVIOUS AUDIO REF",
+        "showNav": true,
+        "showAllGraphs": true,
+        "sort": "position",
+        "customSortAlphabet": "",
+        "toggleRestriction": "default"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 913,
+      "type": "Note",
+      "pos": [
+        -2490,
+        930
+      ],
+      "size": [
+        920,
+        310
+      ],
+      "flags": {},
+      "order": 208,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "⚠ DISCLAIMER — FULL AUDIO REF IS EXPERIMENTAL",
+      "properties": {},
+      "widgets_values": [
+        "OFF BY DEFAULT — ENABLE ONLY FOR EXPERIMENTS.\n\nThis feeds the ENTIRE audio of the previous delivered clip into the next Ref2VA clip as an ordinary audio reference.\n\n⚠ In our test this could BREAK AUDIO CONTINUATION: the music restarted/replayed from an earlier point and produced a noticeable seam.\n\nThe proven 39-frame timeline-audio continuation remains active regardless. If enabling this makes the join worse, turn this option OFF again."
+      ]
+    },
+    {
+      "id": 914,
+      "type": "Note",
+      "pos": [
+        -970,
+        2330
+      ],
+      "size": [
+        760,
+        130
+      ],
+      "flags": {},
+      "order": 209,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "OPTIONAL AUDIO REF SIGNAL",
+      "properties": {},
+      "widgets_values": [
+        "OFF: muted Any Switch outputs None → Ref2VA receives no full-audio reference.\nON: each switch passes the previous clip's entire delivered audio into ref_audio_0.\nThe 39-frame Motion Context timeline-audio path is separate and stays enabled."
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      101,
+      0,
+      102,
+      0,
+      "FLOAT"
+    ],
+    [
+      2,
+      1,
+      0,
+      5,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      2,
+      0,
+      110,
+      0,
+      "CLIP"
+    ],
+    [
+      4,
+      3,
+      0,
+      110,
+      1,
+      "VAE"
+    ],
+    [
+      5,
+      100,
+      0,
+      110,
+      10,
+      "INT"
+    ],
+    [
+      6,
+      100,
+      1,
+      110,
+      11,
+      "INT"
+    ],
+    [
+      7,
+      102,
+      1,
+      110,
+      12,
+      "INT"
+    ],
+    [
+      8,
+      5,
+      0,
+      121,
+      0,
+      "MODEL"
+    ],
+    [
+      9,
+      110,
+      0,
+      121,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      10,
+      120,
+      0,
+      124,
+      0,
+      "NOISE"
+    ],
+    [
+      11,
+      121,
+      0,
+      124,
+      1,
+      "GUIDER"
+    ],
+    [
+      12,
+      122,
+      0,
+      124,
+      2,
+      "SAMPLER"
+    ],
+    [
+      13,
+      5,
+      0,
+      123,
+      0,
+      "MODEL"
+    ],
+    [
+      14,
+      123,
+      0,
+      124,
+      3,
+      "SIGMAS"
+    ],
+    [
+      15,
+      110,
+      1,
+      124,
+      4,
+      "LATENT"
+    ],
+    [
+      16,
+      124,
+      0,
+      130,
+      0,
+      "LATENT"
+    ],
+    [
+      17,
+      3,
+      0,
+      130,
+      1,
+      "VAE"
+    ],
+    [
+      18,
+      124,
+      0,
+      131,
+      0,
+      "LATENT"
+    ],
+    [
+      19,
+      4,
+      0,
+      131,
+      1,
+      "VAE"
+    ],
+    [
+      20,
+      130,
+      0,
+      132,
+      0,
+      "IMAGE"
+    ],
+    [
+      21,
+      131,
+      0,
+      132,
+      1,
+      "AUDIO"
+    ],
+    [
+      22,
+      132,
+      0,
+      133,
+      0,
+      "IMAGE"
+    ],
+    [
+      23,
+      132,
+      1,
+      133,
+      1,
+      "AUDIO"
+    ],
+    [
+      24,
+      2,
+      0,
+      200,
+      0,
+      "CLIP"
+    ],
+    [
+      25,
+      3,
+      0,
+      200,
+      1,
+      "VAE"
+    ],
+    [
+      26,
+      100,
+      0,
+      200,
+      10,
+      "INT"
+    ],
+    [
+      27,
+      100,
+      1,
+      200,
+      11,
+      "INT"
+    ],
+    [
+      28,
+      102,
+      1,
+      200,
+      12,
+      "INT"
+    ],
+    [
+      29,
+      200,
+      0,
+      201,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      30,
+      3,
+      0,
+      201,
+      1,
+      "VAE"
+    ],
+    [
+      31,
+      200,
+      1,
+      201,
+      2,
+      "LATENT"
+    ],
+    [
+      32,
+      132,
+      0,
+      201,
+      3,
+      "IMAGE"
+    ],
+    [
+      33,
+      124,
+      0,
+      201,
+      4,
+      "LATENT"
+    ],
+    [
+      34,
+      5,
+      0,
+      211,
+      0,
+      "MODEL"
+    ],
+    [
+      35,
+      201,
+      0,
+      211,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      36,
+      210,
+      0,
+      214,
+      0,
+      "NOISE"
+    ],
+    [
+      37,
+      211,
+      0,
+      214,
+      1,
+      "GUIDER"
+    ],
+    [
+      38,
+      212,
+      0,
+      214,
+      2,
+      "SAMPLER"
+    ],
+    [
+      39,
+      5,
+      0,
+      213,
+      0,
+      "MODEL"
+    ],
+    [
+      40,
+      213,
+      0,
+      214,
+      3,
+      "SIGMAS"
+    ],
+    [
+      41,
+      200,
+      1,
+      214,
+      4,
+      "LATENT"
+    ],
+    [
+      42,
+      214,
+      0,
+      220,
+      0,
+      "LATENT"
+    ],
+    [
+      43,
+      3,
+      0,
+      220,
+      1,
+      "VAE"
+    ],
+    [
+      44,
+      214,
+      0,
+      221,
+      0,
+      "LATENT"
+    ],
+    [
+      45,
+      4,
+      0,
+      221,
+      1,
+      "VAE"
+    ],
+    [
+      46,
+      220,
+      0,
+      222,
+      0,
+      "IMAGE"
+    ],
+    [
+      47,
+      221,
+      0,
+      222,
+      1,
+      "AUDIO"
+    ],
+    [
+      48,
+      201,
+      1,
+      222,
+      2,
+      "INT"
+    ],
+    [
+      49,
+      222,
+      0,
+      223,
+      0,
+      "IMAGE"
+    ],
+    [
+      50,
+      222,
+      1,
+      223,
+      1,
+      "AUDIO"
+    ],
+    [
+      51,
+      132,
+      0,
+      230,
+      0,
+      "IMAGE"
+    ],
+    [
+      52,
+      222,
+      0,
+      230,
+      1,
+      "IMAGE"
+    ],
+    [
+      53,
+      132,
+      1,
+      231,
+      0,
+      "AUDIO"
+    ],
+    [
+      54,
+      222,
+      1,
+      231,
+      1,
+      "AUDIO"
+    ],
+    [
+      55,
+      2,
+      0,
+      300,
+      0,
+      "CLIP"
+    ],
+    [
+      56,
+      3,
+      0,
+      300,
+      1,
+      "VAE"
+    ],
+    [
+      57,
+      100,
+      0,
+      300,
+      10,
+      "INT"
+    ],
+    [
+      58,
+      100,
+      1,
+      300,
+      11,
+      "INT"
+    ],
+    [
+      59,
+      102,
+      1,
+      300,
+      12,
+      "INT"
+    ],
+    [
+      60,
+      300,
+      0,
+      301,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      61,
+      3,
+      0,
+      301,
+      1,
+      "VAE"
+    ],
+    [
+      62,
+      300,
+      1,
+      301,
+      2,
+      "LATENT"
+    ],
+    [
+      63,
+      222,
+      0,
+      301,
+      3,
+      "IMAGE"
+    ],
+    [
+      64,
+      214,
+      0,
+      301,
+      4,
+      "LATENT"
+    ],
+    [
+      65,
+      5,
+      0,
+      311,
+      0,
+      "MODEL"
+    ],
+    [
+      66,
+      301,
+      0,
+      311,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      67,
+      310,
+      0,
+      314,
+      0,
+      "NOISE"
+    ],
+    [
+      68,
+      311,
+      0,
+      314,
+      1,
+      "GUIDER"
+    ],
+    [
+      69,
+      312,
+      0,
+      314,
+      2,
+      "SAMPLER"
+    ],
+    [
+      70,
+      5,
+      0,
+      313,
+      0,
+      "MODEL"
+    ],
+    [
+      71,
+      313,
+      0,
+      314,
+      3,
+      "SIGMAS"
+    ],
+    [
+      72,
+      300,
+      1,
+      314,
+      4,
+      "LATENT"
+    ],
+    [
+      73,
+      314,
+      0,
+      320,
+      0,
+      "LATENT"
+    ],
+    [
+      74,
+      3,
+      0,
+      320,
+      1,
+      "VAE"
+    ],
+    [
+      75,
+      314,
+      0,
+      321,
+      0,
+      "LATENT"
+    ],
+    [
+      76,
+      4,
+      0,
+      321,
+      1,
+      "VAE"
+    ],
+    [
+      77,
+      320,
+      0,
+      322,
+      0,
+      "IMAGE"
+    ],
+    [
+      78,
+      321,
+      0,
+      322,
+      1,
+      "AUDIO"
+    ],
+    [
+      79,
+      301,
+      1,
+      322,
+      2,
+      "INT"
+    ],
+    [
+      80,
+      322,
+      0,
+      323,
+      0,
+      "IMAGE"
+    ],
+    [
+      81,
+      322,
+      1,
+      323,
+      1,
+      "AUDIO"
+    ],
+    [
+      82,
+      230,
+      0,
+      330,
+      0,
+      "IMAGE"
+    ],
+    [
+      83,
+      322,
+      0,
+      330,
+      1,
+      "IMAGE"
+    ],
+    [
+      84,
+      231,
+      0,
+      331,
+      0,
+      "AUDIO"
+    ],
+    [
+      85,
+      322,
+      1,
+      331,
+      1,
+      "AUDIO"
+    ],
+    [
+      86,
+      2,
+      0,
+      400,
+      0,
+      "CLIP"
+    ],
+    [
+      87,
+      3,
+      0,
+      400,
+      1,
+      "VAE"
+    ],
+    [
+      88,
+      100,
+      0,
+      400,
+      10,
+      "INT"
+    ],
+    [
+      89,
+      100,
+      1,
+      400,
+      11,
+      "INT"
+    ],
+    [
+      90,
+      102,
+      1,
+      400,
+      12,
+      "INT"
+    ],
+    [
+      91,
+      400,
+      0,
+      401,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      92,
+      3,
+      0,
+      401,
+      1,
+      "VAE"
+    ],
+    [
+      93,
+      400,
+      1,
+      401,
+      2,
+      "LATENT"
+    ],
+    [
+      94,
+      322,
+      0,
+      401,
+      3,
+      "IMAGE"
+    ],
+    [
+      95,
+      314,
+      0,
+      401,
+      4,
+      "LATENT"
+    ],
+    [
+      96,
+      5,
+      0,
+      411,
+      0,
+      "MODEL"
+    ],
+    [
+      97,
+      401,
+      0,
+      411,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      98,
+      410,
+      0,
+      414,
+      0,
+      "NOISE"
+    ],
+    [
+      99,
+      411,
+      0,
+      414,
+      1,
+      "GUIDER"
+    ],
+    [
+      100,
+      412,
+      0,
+      414,
+      2,
+      "SAMPLER"
+    ],
+    [
+      101,
+      5,
+      0,
+      413,
+      0,
+      "MODEL"
+    ],
+    [
+      102,
+      413,
+      0,
+      414,
+      3,
+      "SIGMAS"
+    ],
+    [
+      103,
+      400,
+      1,
+      414,
+      4,
+      "LATENT"
+    ],
+    [
+      104,
+      414,
+      0,
+      420,
+      0,
+      "LATENT"
+    ],
+    [
+      105,
+      3,
+      0,
+      420,
+      1,
+      "VAE"
+    ],
+    [
+      106,
+      414,
+      0,
+      421,
+      0,
+      "LATENT"
+    ],
+    [
+      107,
+      4,
+      0,
+      421,
+      1,
+      "VAE"
+    ],
+    [
+      108,
+      420,
+      0,
+      422,
+      0,
+      "IMAGE"
+    ],
+    [
+      109,
+      421,
+      0,
+      422,
+      1,
+      "AUDIO"
+    ],
+    [
+      110,
+      401,
+      1,
+      422,
+      2,
+      "INT"
+    ],
+    [
+      111,
+      422,
+      0,
+      423,
+      0,
+      "IMAGE"
+    ],
+    [
+      112,
+      422,
+      1,
+      423,
+      1,
+      "AUDIO"
+    ],
+    [
+      113,
+      330,
+      0,
+      430,
+      0,
+      "IMAGE"
+    ],
+    [
+      114,
+      422,
+      0,
+      430,
+      1,
+      "IMAGE"
+    ],
+    [
+      115,
+      331,
+      0,
+      431,
+      0,
+      "AUDIO"
+    ],
+    [
+      116,
+      422,
+      1,
+      431,
+      1,
+      "AUDIO"
+    ],
+    [
+      117,
+      2,
+      0,
+      500,
+      0,
+      "CLIP"
+    ],
+    [
+      118,
+      3,
+      0,
+      500,
+      1,
+      "VAE"
+    ],
+    [
+      119,
+      100,
+      0,
+      500,
+      10,
+      "INT"
+    ],
+    [
+      120,
+      100,
+      1,
+      500,
+      11,
+      "INT"
+    ],
+    [
+      121,
+      102,
+      1,
+      500,
+      12,
+      "INT"
+    ],
+    [
+      122,
+      500,
+      0,
+      501,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      123,
+      3,
+      0,
+      501,
+      1,
+      "VAE"
+    ],
+    [
+      124,
+      500,
+      1,
+      501,
+      2,
+      "LATENT"
+    ],
+    [
+      125,
+      422,
+      0,
+      501,
+      3,
+      "IMAGE"
+    ],
+    [
+      126,
+      414,
+      0,
+      501,
+      4,
+      "LATENT"
+    ],
+    [
+      127,
+      5,
+      0,
+      511,
+      0,
+      "MODEL"
+    ],
+    [
+      128,
+      501,
+      0,
+      511,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      129,
+      510,
+      0,
+      514,
+      0,
+      "NOISE"
+    ],
+    [
+      130,
+      511,
+      0,
+      514,
+      1,
+      "GUIDER"
+    ],
+    [
+      131,
+      512,
+      0,
+      514,
+      2,
+      "SAMPLER"
+    ],
+    [
+      132,
+      5,
+      0,
+      513,
+      0,
+      "MODEL"
+    ],
+    [
+      133,
+      513,
+      0,
+      514,
+      3,
+      "SIGMAS"
+    ],
+    [
+      134,
+      500,
+      1,
+      514,
+      4,
+      "LATENT"
+    ],
+    [
+      135,
+      514,
+      0,
+      520,
+      0,
+      "LATENT"
+    ],
+    [
+      136,
+      3,
+      0,
+      520,
+      1,
+      "VAE"
+    ],
+    [
+      137,
+      514,
+      0,
+      521,
+      0,
+      "LATENT"
+    ],
+    [
+      138,
+      4,
+      0,
+      521,
+      1,
+      "VAE"
+    ],
+    [
+      139,
+      520,
+      0,
+      522,
+      0,
+      "IMAGE"
+    ],
+    [
+      140,
+      521,
+      0,
+      522,
+      1,
+      "AUDIO"
+    ],
+    [
+      141,
+      501,
+      1,
+      522,
+      2,
+      "INT"
+    ],
+    [
+      142,
+      522,
+      0,
+      523,
+      0,
+      "IMAGE"
+    ],
+    [
+      143,
+      522,
+      1,
+      523,
+      1,
+      "AUDIO"
+    ],
+    [
+      144,
+      430,
+      0,
+      530,
+      0,
+      "IMAGE"
+    ],
+    [
+      145,
+      522,
+      0,
+      530,
+      1,
+      "IMAGE"
+    ],
+    [
+      146,
+      431,
+      0,
+      531,
+      0,
+      "AUDIO"
+    ],
+    [
+      147,
+      522,
+      1,
+      531,
+      1,
+      "AUDIO"
+    ],
+    [
+      148,
+      2,
+      0,
+      600,
+      0,
+      "CLIP"
+    ],
+    [
+      149,
+      3,
+      0,
+      600,
+      1,
+      "VAE"
+    ],
+    [
+      150,
+      100,
+      0,
+      600,
+      10,
+      "INT"
+    ],
+    [
+      151,
+      100,
+      1,
+      600,
+      11,
+      "INT"
+    ],
+    [
+      152,
+      102,
+      1,
+      600,
+      12,
+      "INT"
+    ],
+    [
+      153,
+      600,
+      0,
+      601,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      154,
+      3,
+      0,
+      601,
+      1,
+      "VAE"
+    ],
+    [
+      155,
+      600,
+      1,
+      601,
+      2,
+      "LATENT"
+    ],
+    [
+      156,
+      522,
+      0,
+      601,
+      3,
+      "IMAGE"
+    ],
+    [
+      157,
+      514,
+      0,
+      601,
+      4,
+      "LATENT"
+    ],
+    [
+      158,
+      5,
+      0,
+      611,
+      0,
+      "MODEL"
+    ],
+    [
+      159,
+      601,
+      0,
+      611,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      160,
+      610,
+      0,
+      614,
+      0,
+      "NOISE"
+    ],
+    [
+      161,
+      611,
+      0,
+      614,
+      1,
+      "GUIDER"
+    ],
+    [
+      162,
+      612,
+      0,
+      614,
+      2,
+      "SAMPLER"
+    ],
+    [
+      163,
+      5,
+      0,
+      613,
+      0,
+      "MODEL"
+    ],
+    [
+      164,
+      613,
+      0,
+      614,
+      3,
+      "SIGMAS"
+    ],
+    [
+      165,
+      600,
+      1,
+      614,
+      4,
+      "LATENT"
+    ],
+    [
+      166,
+      614,
+      0,
+      620,
+      0,
+      "LATENT"
+    ],
+    [
+      167,
+      3,
+      0,
+      620,
+      1,
+      "VAE"
+    ],
+    [
+      168,
+      614,
+      0,
+      621,
+      0,
+      "LATENT"
+    ],
+    [
+      169,
+      4,
+      0,
+      621,
+      1,
+      "VAE"
+    ],
+    [
+      170,
+      620,
+      0,
+      622,
+      0,
+      "IMAGE"
+    ],
+    [
+      171,
+      621,
+      0,
+      622,
+      1,
+      "AUDIO"
+    ],
+    [
+      172,
+      601,
+      1,
+      622,
+      2,
+      "INT"
+    ],
+    [
+      173,
+      622,
+      0,
+      623,
+      0,
+      "IMAGE"
+    ],
+    [
+      174,
+      622,
+      1,
+      623,
+      1,
+      "AUDIO"
+    ],
+    [
+      175,
+      530,
+      0,
+      630,
+      0,
+      "IMAGE"
+    ],
+    [
+      176,
+      622,
+      0,
+      630,
+      1,
+      "IMAGE"
+    ],
+    [
+      177,
+      531,
+      0,
+      631,
+      0,
+      "AUDIO"
+    ],
+    [
+      178,
+      622,
+      1,
+      631,
+      1,
+      "AUDIO"
+    ],
+    [
+      179,
+      630,
+      0,
+      800,
+      0,
+      "IMAGE"
+    ],
+    [
+      180,
+      631,
+      0,
+      800,
+      1,
+      "AUDIO"
+    ],
+    [
+      181,
+      4,
+      0,
+      110,
+      2,
+      "VAE"
+    ],
+    [
+      182,
+      910,
+      0,
+      110,
+      3,
+      "IMAGE"
+    ],
+    [
+      183,
+      911,
+      0,
+      110,
+      4,
+      "IMAGE"
+    ],
+    [
+      184,
+      4,
+      0,
+      200,
+      2,
+      "VAE"
+    ],
+    [
+      185,
+      910,
+      0,
+      200,
+      3,
+      "IMAGE"
+    ],
+    [
+      186,
+      911,
+      0,
+      200,
+      4,
+      "IMAGE"
+    ],
+    [
+      187,
+      4,
+      0,
+      300,
+      2,
+      "VAE"
+    ],
+    [
+      188,
+      910,
+      0,
+      300,
+      3,
+      "IMAGE"
+    ],
+    [
+      189,
+      911,
+      0,
+      300,
+      4,
+      "IMAGE"
+    ],
+    [
+      190,
+      4,
+      0,
+      400,
+      2,
+      "VAE"
+    ],
+    [
+      191,
+      910,
+      0,
+      400,
+      3,
+      "IMAGE"
+    ],
+    [
+      192,
+      911,
+      0,
+      400,
+      4,
+      "IMAGE"
+    ],
+    [
+      193,
+      4,
+      0,
+      500,
+      2,
+      "VAE"
+    ],
+    [
+      194,
+      910,
+      0,
+      500,
+      3,
+      "IMAGE"
+    ],
+    [
+      195,
+      911,
+      0,
+      500,
+      4,
+      "IMAGE"
+    ],
+    [
+      196,
+      4,
+      0,
+      600,
+      2,
+      "VAE"
+    ],
+    [
+      197,
+      910,
+      0,
+      600,
+      3,
+      "IMAGE"
+    ],
+    [
+      198,
+      911,
+      0,
+      600,
+      4,
+      "IMAGE"
+    ],
+    [
+      199,
+      132,
+      1,
+      920,
+      0,
+      "AUDIO"
+    ],
+    [
+      200,
+      920,
+      0,
+      200,
+      8,
+      "AUDIO"
+    ],
+    [
+      201,
+      222,
+      1,
+      921,
+      0,
+      "AUDIO"
+    ],
+    [
+      202,
+      921,
+      0,
+      300,
+      8,
+      "AUDIO"
+    ],
+    [
+      203,
+      322,
+      1,
+      922,
+      0,
+      "AUDIO"
+    ],
+    [
+      204,
+      922,
+      0,
+      400,
+      8,
+      "AUDIO"
+    ],
+    [
+      205,
+      422,
+      1,
+      923,
+      0,
+      "AUDIO"
+    ],
+    [
+      206,
+      923,
+      0,
+      500,
+      8,
+      "AUDIO"
+    ],
+    [
+      207,
+      522,
+      1,
+      924,
+      0,
+      "AUDIO"
+    ],
+    [
+      208,
+      924,
+      0,
+      600,
+      8,
+      "AUDIO"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "GLOBAL CONTROLS + MODELS",
+      "bounding": [
+        -2040,
+        -1060,
+        900,
+        1100
+      ],
+      "color": "#3f789e",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "CLIP 1 — ACTIVE REF2VA START",
+      "bounding": [
+        -1160,
+        -940,
+        2300,
+        620
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "CLIP 2 — ACTIVE REF + MOTION CONTEXT 39/39",
+      "bounding": [
+        1190,
+        -980,
+        2750,
+        720
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "OPTIONAL EXTENSION — CLIP 3 — REF + MOTION CONTEXT 39/39",
+      "bounding": [
+        1190,
+        -130,
+        2750,
+        720
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "OPTIONAL EXTENSION — CLIP 4 — REF + MOTION CONTEXT 39/39",
+      "bounding": [
+        1190,
+        720,
+        2750,
+        720
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 6,
+      "title": "OPTIONAL EXTENSION — CLIP 5 — REF + MOTION CONTEXT 39/39",
+      "bounding": [
+        1190,
+        1570,
+        2750,
+        720
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 7,
+      "title": "OPTIONAL EXTENSION — CLIP 6 — REF + MOTION CONTEXT 39/39",
+      "bounding": [
+        1190,
+        2420,
+        2750,
+        720
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 8,
+      "title": "FINAL OUTPUT",
+      "bounding": [
+        4080,
+        2450,
+        550,
+        420
+      ],
+      "color": "#2f6b3f",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 9,
+      "title": "GLOBAL CHARACTER REFS — USED BY EVERY CLIP",
+      "bounding": [
+        -2040,
+        120,
+        920,
+        780
+      ],
+      "color": "#744c8c",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 10,
+      "title": "OPTIONAL FULL PREVIOUS AUDIO REF — EXPERIMENTAL",
+      "bounding": [
+        -1030,
+        960,
+        900,
+        1540
+      ],
+      "color": "#8c4c4c",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.42,
+      "offset": [
+        1370,
+        760
+      ]
+    },
+    "frontendVersion": "1.27.10",
+    "h3MotionContextCredit": {
+      "multiRefPatchAuthor": "seitanism",
+      "workflowAuthor": "seitanism",
+      "patchSource": "https://discord.com/channels/1076117621407223829/1535700117452226560/1535771676158206032",
+      "workflowSource": "https://discord.com/channels/1076117621407223829/1535700117452226560/1535771814452793474"
+    },
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true,
+    "ue_links": [],
+    "links_added_by_ue": []
+  },
+  "version": 0.4
+}

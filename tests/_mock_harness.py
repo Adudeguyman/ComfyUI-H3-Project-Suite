@@ -18,6 +18,8 @@ Then imports patch_layout against the fakes and checks:
   3. a deliberately broken ref cursor (advance = 2*ref_audio_t) makes the
      self-test FAIL, i.e. the new ref case actually detects upstream drift
   4. the mixed stock/MC + ref guard trips
+  5. single-ref timeline audio still lands at the requested frame
+  6. Ref2VA image refs remain in place ahead of timeline audio
 """
 
 import importlib
@@ -196,6 +198,44 @@ def main():
     print("5. audio rows end-aligned at target frame %d "
           "(t %.3f..%.3f), video anchors unmoved" %
           (end_frame, times[0], times[-1]))
+
+    # 6. existing Ref2VA refs can precede the marked MC audio block. Only
+    # that final audio segment moves; the image refs retain stock positions.
+    pl5 = load_patch(make_mm())
+    assert pl5.apply_patch()
+    mm5 = sys.modules["comfy.ldm.minimax.model"]
+    run5 = [{"resolved_frame_index": 0, pl5.MC_KEY: i} for i in range(4)]
+    existing_audio_t = 3
+    refs5 = [
+        {"kind": "image"},
+        {"kind": "image"},
+        {"kind": "audio", "ref_audio_t": existing_audio_t},
+        {"kind": "audio", "ref_audio_t": rt,
+         pl5.MC_AUDIO_KEY: end_frame},
+    ]
+    lay5 = mm5.PackedLayout(text_len, latent_t, lh, lw, audio_t,
+                            keyframes=run5, refs=refs5, frame_count=fc)
+    ref_segments = [(a, b) for a, b, k in lay5.segments if k == "ref"]
+    assert len(ref_segments) == 4
+    img_times = [float(lay5.position_ids[a, 0])
+                 for a, _ in ref_segments[:2]]
+    assert np.allclose(img_times, [text_len, text_len + 1]), img_times
+    a, b = ref_segments[2]
+    ordinary_audio_times = sorted(
+        float(lay5.position_ids[i, 0]) for i in range(a, b))
+    assert np.allclose(
+        ordinary_audio_times,
+        [text_len + 2 + i * 0.5 for i in range(2 * existing_audio_t)])
+    a, b = ref_segments[-1]
+    audio_times = sorted(float(lay5.position_ids[i, 0]) for i in range(a, b))
+    target_origin = text_len + 2 + existing_audio_t + rt
+    want_end = target_origin + FRAME_RESCALE * end_frame
+    assert abs(audio_times[0] - (want_end - rt)) < 1e-6
+    assert abs(audio_times[-1] - (want_end - 0.5)) < 1e-6
+    print("6. Ref2VA image refs preserved at %s and ordinary audio at "
+          "%.3f..%.3f; appended MC audio moved to %.3f..%.3f" %
+          (img_times, ordinary_audio_times[0], ordinary_audio_times[-1],
+           audio_times[0], audio_times[-1]))
 
     print("all checks passed")
 
