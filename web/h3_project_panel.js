@@ -435,36 +435,6 @@ class ChainTimeline {
     }
   }
 
-  syncBranchButton() {
-    const b = this.branchBtn;
-    if (!b) return;
-    const seg = this.timeline?.[this.curSeg];
-    const clip = seg?.clip;
-    const key = clip ? `${clip.index}:${clip.status}` : "none";
-    if (key === this._branchBtnIndex) return;   // nothing changed
-    this._branchBtnIndex = key;
-    if (!clip) {
-      b.style.display = "none";
-      return;
-    }
-    b.style.display = "";
-    if (clip.status === "approved") {
-      b.disabled = false;
-      b.textContent = `Branch from clip ${clip.index}\u2026`;
-      b.title = "copy clips 1.." + clip.index + " into a new project and " +
-                "iterate there, leaving this one intact";
-      b.onclick = () => this.branchFrom(clip.index);
-    } else {
-      // branching needs a settled tail; a pending clip has none yet
-      b.disabled = true;
-      b.textContent = `Branch from clip ${clip.index}\u2026`;
-      b.title = `Clip ${clip.index} is still pending. Approve or reject ` +
-                `it first, or scrub back to an approved clip to branch ` +
-                `from there.`;
-      b.onclick = null;
-    }
-  }
-
   paintPlayhead() {
     if (!this.fill || !this.timeEl) return;
     const now = this.globalNow();
@@ -507,7 +477,6 @@ class ChainTimeline {
 // review modal's timeline is left alone.
 
 class BranchModal extends ChainTimeline {
-  syncBranchButton() { /* the branch modal has no branch button */ }
 
   constructor(project, index, onDone) {
     super();
@@ -693,6 +662,14 @@ class ProjectModal extends ChainTimeline {
       if (e.key === "Escape") this.nameWrap.classList.remove("on");
       e.stopPropagation();
     };
+    // the panel follows the queue on its own, but 'executed' can be missed
+    // if the browser was asleep, the tab was closed mid-render, or a clip
+    // arrived from another window. This forces a re-read from disk.
+    this.refreshBtn = el("button", {
+      class: "h3p-btn", text: "\u21bb",
+      title: "check the project folder for new clips",
+      onclick: () => this.manualRefresh() });
+
     this.nameWrap = el("div", { class: "h3p-namewrap" },
       this.nameInput,
       el("button", { class: "h3p-btn ok", text: "Create",
@@ -763,6 +740,7 @@ class ProjectModal extends ChainTimeline {
           this.select,
           el("button", { class: "h3p-btn", text: "New",
                          onclick: () => this.showNameEntry() }),
+          this.refreshBtn,
           this.nameWrap,
           el("div", { class: "h3p-spacer" }),
           el("button", { class: "h3p-btn", text: "Open folder",
@@ -790,6 +768,11 @@ class ProjectModal extends ChainTimeline {
 
     this._esc = (e) => { if (e.key === "Escape") this.close(); };
     this._onExec = () => this.refresh(true);
+    // coming back to the tab is the moment a missed 'executed' shows up,
+    // so re-read then too. Cheap: one small JSON fetch.
+    this._onFocus = () => {
+      if (document.visibilityState === "visible") this.refresh(true);
+    };
   }
 
   open() {
@@ -798,6 +781,8 @@ class ProjectModal extends ChainTimeline {
     document.body.append(this.overlay);
     document.addEventListener("keydown", this._esc);
     api.addEventListener("executed", this._onExec);
+    document.addEventListener("visibilitychange", this._onFocus);
+    window.addEventListener("focus", this._onFocus);
     this.loadProjects().then(() => this.refresh(true));
   }
 
@@ -806,6 +791,8 @@ class ProjectModal extends ChainTimeline {
     this.overlay.remove();
     document.removeEventListener("keydown", this._esc);
     api.removeEventListener("executed", this._onExec);
+    document.removeEventListener("visibilitychange", this._onFocus);
+    window.removeEventListener("focus", this._onFocus);
     this.node._h3RefreshSummary?.();
   }
 
@@ -909,6 +896,36 @@ class ProjectModal extends ChainTimeline {
         });
       })
       .catch((e) => toast(e.message, true));
+  }
+
+  syncBranchButton() {
+    const b = this.branchBtn;
+    if (!b) return;
+    const seg = this.timeline?.[this.curSeg];
+    const clip = seg?.clip;
+    const key = clip ? `${clip.index}:${clip.status}` : "none";
+    if (key === this._branchBtnIndex) return;   // nothing changed
+    this._branchBtnIndex = key;
+    if (!clip) {
+      b.style.display = "none";
+      return;
+    }
+    b.style.display = "";
+    if (clip.status === "approved") {
+      b.disabled = false;
+      b.textContent = `Branch from clip ${clip.index}\u2026`;
+      b.title = "copy clips 1.." + clip.index + " into a new project and " +
+                "iterate there, leaving this one intact";
+      b.onclick = () => this.branchFrom(clip.index);
+    } else {
+      // branching needs a settled tail; a pending clip has none yet
+      b.disabled = true;
+      b.textContent = `Branch from clip ${clip.index}\u2026`;
+      b.title = `Clip ${clip.index} is still pending. Approve or reject ` +
+                `it first, or scrub back to an approved clip to branch ` +
+                `from there.`;
+      b.onclick = null;
+    }
   }
 
   branchFrom(index) {
@@ -1064,6 +1081,39 @@ class ProjectModal extends ChainTimeline {
       v.removeAttribute("src");
     }
     this.render();
+  }
+
+  async manualRefresh() {
+    const before = this.state?.clips?.length || 0;
+    const beforePending = this.state?.pending?.basename || null;
+    this.refreshBtn.disabled = true;
+    this.refreshBtn.textContent = "\u2026";
+    // durations and the timeline signature are cleared so a clip that was
+    // overwritten (a re-roll landing on the same name) is re-measured
+    // rather than served from cache
+    this.durations = {};
+    this._sig = null;
+    try {
+      await this.loadProjects();
+      await this.refresh(true);
+      const after = this.state?.clips?.length || 0;
+      const pending = this.state?.pending;
+      if (this.state?.missing) {
+        toast(this.state.missing, true);
+      } else if (after > before) {
+        toast(`found ${after - before} new clip` +
+              `${after - before === 1 ? "" : "s"}`);
+      } else if (pending && pending.basename !== beforePending) {
+        toast(`clip ${pending.index} take ${pending.take} is ready`);
+      } else {
+        toast("up to date");
+      }
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      this.refreshBtn.disabled = false;
+      this.refreshBtn.textContent = "\u21bb";
+    }
   }
 
   async refresh(refetch = false) {
