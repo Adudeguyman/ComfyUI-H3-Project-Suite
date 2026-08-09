@@ -58,6 +58,8 @@ const CSS = `
 .h3p-playerempty{color:#5c6472;font-size:12px;text-align:center;line-height:1.7;
   padding:30px;white-space:pre-wrap;}
 .h3p-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.h3p-exportrow{display:flex;align-items:center;min-height:30px;}
+.h3p-inline{display:flex;gap:8px;align-items:center;flex:1;}
 .h3p-modes{display:flex;gap:2px;background:#12151b;border:1px solid #2a2f3a;
   border-radius:7px;padding:2px;}
 .h3p-modes button{background:none;border:0;color:#9aa3b2;padding:4px 12px;
@@ -681,16 +683,29 @@ class ProjectModal extends ChainTimeline {
     this.exportInput = el("input", { class: "h3p-input" });
     this.exportInput.onkeydown = (e) => {
       if (e.key === "Enter") this.doExport();
-      if (e.key === "Escape") this.exportRow.classList.remove("on");
+      if (e.key === "Escape") this.closeExportNaming();
       e.stopPropagation();
     };
-    this.exportRow = el("div", { class: "h3p-namewrap" },
+    // one fixed row: buttons by default, the name field in their place
+    // while naming. Same height either way, so nothing below it moves.
+    this.exportBtns = el("div", { class: "h3p-inline" },
+      el("button", { class: "h3p-btn", text: "Export master",
+                     onclick: () => this.exportMaster(false) }),
+      el("button", { class: "h3p-btn", text: "Export + pending",
+                     title: "seamless concat including the clip awaiting " +
+                            "review \u2014 judge the join without the " +
+                            "player's boundary stutter",
+                     onclick: () => this.exportMaster(true) }));
+    this.exportNaming = el("div", { class: "h3p-inline",
+                                    style: "display:none" },
       el("span", { class: "h3p-takelabel", text: "save as" }),
       this.exportInput,
       el("button", { class: "h3p-btn ok", text: "Write",
                      onclick: () => this.doExport() }),
       el("button", { class: "h3p-btn", text: "Cancel",
-                     onclick: () => this.exportRow.classList.remove("on") }));
+                     onclick: () => this.closeExportNaming() }));
+    this.exportRow = el("div", { class: "h3p-exportrow" },
+      this.exportBtns, this.exportNaming);
 
     this.actions = el("div", { class: "h3p-actions" });
     this.railBody = el("div", { class: "h3p-railbody" });
@@ -712,14 +727,6 @@ class ProjectModal extends ChainTimeline {
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),
-          el("button", { class: "h3p-btn", text: "Export master",
-                         onclick: () => this.exportMaster(false) }),
-          el("button", { class: "h3p-btn",
-                         text: "Export + pending",
-                         title: "seamless concat including the clip " +
-                                "awaiting review \u2014 judge the join " +
-                                "without the player's boundary stutter",
-                         onclick: () => this.exportMaster(true) }),
           el("button", { class: "h3p-btn", text: "Purge trash",
                          onclick: () => this.purge() }),
           el("button", { class: "h3p-x", text: "\u2715",
@@ -729,8 +736,8 @@ class ProjectModal extends ChainTimeline {
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
                this.viewSub,
                el("div", { class: "h3p-spacer" }), this.modes),
-            this.player, this.transport, this.exportRow,
-            this.confirm, this.actions),
+            this.player, this.transport, this.confirm,
+            this.exportRow, this.actions),
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
             this.railBody)),
@@ -809,6 +816,7 @@ class ProjectModal extends ChainTimeline {
     this.setName(this.select.value);
     this.viewing = null;
     this.hideConfirm();
+    this.closeExportNaming();
     this.refresh(true);
   }
 
@@ -913,15 +921,21 @@ class ProjectModal extends ChainTimeline {
     } catch (e) {
       this.exportInput.value = includePending ? "preview.mp4" : "master.mp4";
     }
-    this.exportRow.classList.add("on");
+    this.exportBtns.style.display = "none";
+    this.exportNaming.style.display = "flex";
     this.exportInput.focus();
     this.exportInput.select();
+  }
+
+  closeExportNaming() {
+    this.exportNaming.style.display = "none";
+    this.exportBtns.style.display = "flex";
   }
 
   async doExport() {
     const filename = this.exportInput.value.trim();
     if (!filename) return;
-    this.exportRow.classList.remove("on");
+    this.closeExportNaming();
     toast("concatenating\u2026");
     try {
       const out = await post("/h3_suite/project/export", {
@@ -957,6 +971,7 @@ class ProjectModal extends ChainTimeline {
   setMode(mode) {
     this.mode = mode;
     this.viewing = null;
+    this.closeExportNaming();
     this.curSeg = null;
     this.standbySeg = null;
     for (const v of [this.vA, this.vB]) {
