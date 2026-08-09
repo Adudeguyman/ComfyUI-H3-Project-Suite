@@ -68,6 +68,39 @@ class Panel {
                 btn("\u21bb", () => this.refresh()));
     this.root.append(head);
 
+    // inline name entry (shown by New; replaces window.prompt)
+    this.nameRow = el("div", { display: "none", gap: "6px" });
+    this.nameInput = el("input", {
+      flex: "1", background: C.card, color: C.text,
+      border: `1px solid ${C.line}`, borderRadius: "4px", padding: "3px 6px",
+    });
+    this.nameInput.placeholder = "new project name";
+    this.nameInput.onkeydown = (e) => {
+      if (e.key === "Enter") this.createProject();
+      if (e.key === "Escape") this.nameRow.style.display = "none";
+      e.stopPropagation(); // keep LiteGraph hotkeys out of the field
+    };
+    this.nameRow.append(this.nameInput,
+                        btn("Create", () => this.createProject(), C.ok),
+                        btn("Cancel", () => {
+                          this.nameRow.style.display = "none";
+                        }));
+    this.root.append(this.nameRow);
+
+    // inline confirm bar (replaces window.confirm; one pending action)
+    this.confirmBar = el("div", {
+      display: "none", flexDirection: "column", gap: "6px",
+      background: C.card, border: `1px solid ${C.warn}`,
+      borderRadius: "6px", padding: "8px",
+    });
+    this.confirmText = el("div", { whiteSpace: "pre-wrap" });
+    const confirmBtns = el("div", { display: "flex", gap: "6px" });
+    this.confirmYes = btn("Confirm", () => {}, C.warn);
+    confirmBtns.append(this.confirmYes,
+                       btn("Cancel", () => this.hideConfirm()));
+    this.confirmBar.append(this.confirmText, confirmBtns);
+    this.root.append(this.confirmBar);
+
     // pending review card
     this.review = el("div", {
       background: C.card, border: `1px solid ${C.line}`,
@@ -142,11 +175,28 @@ class Panel {
     } catch (e) { /* server without routes: leave empty */ }
   }
 
-  async newProject() {
-    const name = prompt("New project name:");
+  showConfirm(message, onYes) {
+    this.confirmText.textContent = message;
+    this.confirmYes.onclick = () => { this.hideConfirm(); onYes(); };
+    this.confirmBar.style.display = "flex";
+  }
+
+  hideConfirm() {
+    this.confirmBar.style.display = "none";
+  }
+
+  newProject() {
+    this.nameInput.value = "";
+    this.nameRow.style.display = "flex";
+    this.nameInput.focus();
+  }
+
+  async createProject() {
+    const name = this.nameInput.value.trim();
     if (!name) return;
     try {
       await post("/h3_suite/project/create", { name });
+      this.nameRow.style.display = "none";
       this.setWidgetName(name);
       await this.loadProjects();
       this.select.value = name;
@@ -170,10 +220,13 @@ class Panel {
         ? `Reopen clip ${index}? Everything after it was conditioned on ` +
           `it and will be dropped to .trash/:\n\n${drop.join("\n")}`
         : `Reopen clip ${index} for a re-roll?`;
-      if (!confirm(msg)) return;
-      await post("/h3_suite/project/reopen",
-                 { name: this.name(), index, confirm: true });
-      this.refresh();
+      this.showConfirm(msg, async () => {
+        try {
+          await post("/h3_suite/project/reopen",
+                     { name: this.name(), index, confirm: true });
+          this.refresh();
+        } catch (e) { this.error(e); }
+      });
     } catch (e) { this.error(e); }
   }
 
