@@ -86,6 +86,8 @@ const CSS = `
   border-right:2px solid #8fa8d8;pointer-events:none;border-radius:3px 0 0 3px;}
 .h3p-measuring{font-size:10px;color:#5c6472;}
 .h3p-hint{font-size:11px;color:#6b7484;line-height:1.4;}
+.h3p-takes{display:none;align-items:center;gap:6px;}
+.h3p-takelabel{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;}
 
 .h3p-spacer{flex:1;}
 .h3p-confirm{display:none;flex-direction:column;gap:8px;background:#241f14;
@@ -284,6 +286,25 @@ class ProjectModal {
         el("button", { class: "h3p-btn", text: "Cancel",
                        onclick: () => this.hideConfirm() })));
 
+    this.takeSel = el("select", { class: "h3p-select",
+      onchange: () => this.selectTake(this.takeSel.value) });
+    this.takeWrap = el("div", { class: "h3p-takes" },
+      el("span", { class: "h3p-takelabel", text: "take" }), this.takeSel);
+
+    this.exportInput = el("input", { class: "h3p-input" });
+    this.exportInput.onkeydown = (e) => {
+      if (e.key === "Enter") this.doExport();
+      if (e.key === "Escape") this.exportRow.classList.remove("on");
+      e.stopPropagation();
+    };
+    this.exportRow = el("div", { class: "h3p-namewrap" },
+      el("span", { class: "h3p-takelabel", text: "save as" }),
+      this.exportInput,
+      el("button", { class: "h3p-btn ok", text: "Write",
+                     onclick: () => this.doExport() }),
+      el("button", { class: "h3p-btn", text: "Cancel",
+                     onclick: () => this.exportRow.classList.remove("on") }));
+
     this.actions = el("div", { class: "h3p-actions" });
     this.railBody = el("div", { class: "h3p-railbody" });
     this.footText = el("div", {});
@@ -321,7 +342,8 @@ class ProjectModal {
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
                this.viewSub,
                el("div", { class: "h3p-spacer" }), this.modes),
-            this.player, this.transport, this.confirm, this.actions),
+            this.player, this.transport, this.exportRow, this.confirm,
+            this.actions),
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
             this.railBody)),
@@ -447,10 +469,61 @@ class ProjectModal {
       .catch((e) => toast(e.message, true));
   }
 
-  async exportMaster(includePending) {
+  async selectTake(take) {
     try {
-      const out = await post("/h3_suite/project/export",
-        { name: this.name(), include_pending: !!includePending });
+      const pend = this.state?.pending;
+      if (!pend) return;
+      await post("/h3_suite/project/select_take",
+                 { name: this.name(), index: pend.index, take: Number(take) });
+      this.viewing = null;
+      this._sig = null;              // timeline must rebuild on new content
+      toast(`take ${take} selected`);
+      this.refresh(true);
+    } catch (e) { toast(e.message, true); }
+  }
+
+  discardTakes(index) {
+    this.showConfirm(
+      `Trash every take of clip ${index} except the selected one? They ` +
+      `move to .trash/ and can be recovered until you purge.`,
+      async () => {
+        try {
+          const out = await post("/h3_suite/project/discard_takes",
+                                 { name: this.name(), index });
+          toast(`${(out.dropped || []).length} take(s) trashed`);
+          this.refresh(true);
+        } catch (e) { toast(e.message, true); }
+      });
+  }
+
+  async exportMaster(includePending) {
+    this._exportPending = !!includePending;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/export_name?name=` +
+        `${encodeURIComponent(this.name())}` +
+        `&preview=${includePending ? 1 : 0}`);
+      const { suggested, error } = await r.json();
+      if (error) throw new Error(error);
+      this.exportInput.value = suggested;
+    } catch (e) {
+      this.exportInput.value = includePending ? "preview.mp4" : "master.mp4";
+    }
+    this.exportRow.classList.add("on");
+    this.exportInput.focus();
+    this.exportInput.select();
+  }
+
+  async doExport() {
+    const filename = this.exportInput.value.trim();
+    if (!filename) return;
+    this.exportRow.classList.remove("on");
+    toast("concatenating\u2026");
+    try {
+      const out = await post("/h3_suite/project/export", {
+        name: this.name(), include_pending: this._exportPending,
+        filename,
+      });
       toast(`${out.preview ? "preview" : "master"} written ` +
             `(${out.clip_count} clips): ${out.master}`);
     } catch (e) { toast(e.message, true); }
@@ -747,7 +820,9 @@ class ProjectModal {
       }
 
       if (pend) {
+        this.paintTakes(pend);
         this.actions.append(
+          this.takeWrap,
           el("button", { class: "h3p-btn",
                          text: "\u23ee Jump to the join",
                          onclick: () => {
@@ -813,7 +888,9 @@ class ProjectModal {
       this.player.replaceChildren(this.video);
 
       if (pend) {
+        this.paintTakes(shown);
         this.actions.append(
+          this.takeWrap,
           el("button", { class: "h3p-btn ok",
                          text: "Approve \u2014 chain from this",
                          onclick: () => this.act("approve", "approved") }),
@@ -850,6 +927,28 @@ class ProjectModal {
 
     this.paintRail(s, name, approved, tail, shown);
     this.paintFoot(approved, tail, name);
+  }
+
+  paintTakes(clip) {
+    const takes = clip.takes || [];
+    this.takeSel.innerHTML = "";
+    for (const t of takes) {
+      const secs = t.meta?.duration ? ` \u00b7 ${t.meta.duration}s` : "";
+      this.takeSel.append(el("option", {
+        value: String(t.take), text: `take ${t.take}${secs}` }));
+    }
+    this.takeSel.value = String(clip.take);
+    // one take needs no chooser; several get a chooser and a way to prune
+    this.takeWrap.style.display = takes.length > 1 ? "flex" : "none";
+    if (takes.length > 1) {
+      this.takeWrap.querySelectorAll(".h3p-discard").forEach(
+        (n) => n.remove());
+      const b = el("button", { class: "h3p-btn h3p-discard",
+        text: "Keep only this",
+        title: "trash the other takes of this clip",
+        onclick: () => this.discardTakes(clip.index) });
+      this.takeWrap.append(b);
+    }
   }
 
   paintRail(s, name, approved, tail, shown) {

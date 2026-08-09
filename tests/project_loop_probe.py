@@ -241,15 +241,24 @@ def main():
     (base3,) = saver.save(handle, fresh_latent(3.0), images, 24, audio)
     assert base3 == "clip_002_take2"  # re-roll: same index, next take
     trash = os.path.join(out, "h3_projects", "LoopTest", ".trash")
-    assert os.path.isfile(os.path.join(trash, "clip_002_take1.mp4"))
+    # takes are retained for comparison, not trashed on re-roll
+    assert os.path.isfile(os.path.join(cdir, "clip_002_take1.mp4"))
+    proj = Project(out, "LoopTest")
+    assert [t["take"] for t in proj.takes_of(2)] == [1, 2]
+    proj.select_take(2, 1)
+    handle, context, active, status = hub.resolve("LoopTest", True)
+    assert "clip_002_take1" in status or proj.pending()["take"] == 1
     Project(out, "LoopTest").reject()
+    # reject clears every take of the dropped clip
+    assert os.path.isfile(os.path.join(trash, "clip_002_take1.mp4"))
+    assert os.path.isfile(os.path.join(trash, "clip_002_take2.mp4"))
     handle, context, active, status = hub.resolve("LoopTest", True)
     assert active is True and "clip_002_take1" in status
     assert float((context["samples"].parts if hasattr(
         context["samples"], "parts") else context["samples"])[0]
         .a[0, 0, 0, 0, 0]) == 1.0  # still chains from clip 1
-    print("7. re-roll superseded to .trash/, reject dropped clip 2; chain "
-          "still tails clip 1, next render clip_002_take1 again")
+    print("7. re-roll kept both takes, switching works, reject cleared "
+          "every take; chain still tails clip 1")
 
     print("all checks passed")
 

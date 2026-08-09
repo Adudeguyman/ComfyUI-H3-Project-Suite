@@ -64,13 +64,34 @@ def main():
     _fake_pair(p, "clip_002_take2")
     p.record_render(2, 2)
     assert p.pending()["take"] == 2
-    assert os.path.isfile(os.path.join(p.trash_dir, "clip_002_take1.mp4"))
-    assert not os.path.exists(os.path.join(p.clips_dir,
-                                           "clip_002_take1.mp4"))
+    # both takes stay on disk so they can be compared and re-selected
+    assert os.path.isfile(os.path.join(p.clips_dir, "clip_002_take1.mp4"))
+    assert [t["take"] for t in p.takes_of(2)] == [1, 2]
     assert p.pending()["from"] == "clip_001_take1"
+
+    p.select_take(2, 1)
+    assert p.pending()["basename"] == "clip_002_take1"
+    p.select_take(2, 2)
+    assert p.pending()["basename"] == "clip_002_take2"
+    try:
+        p.select_take(2, 9)
+        raise AssertionError("selected a take that does not exist")
+    except ProjectError:
+        pass
     p.approve()
-    print("4. re-roll superseded take 1 into .trash/, take 2 approved, "
-          "'from' records the conditioning source")
+    try:
+        p.select_take(2, 1)
+        raise AssertionError("switched takes on an approved clip")
+    except ProjectError:
+        pass
+    print("4. re-roll KEPT take 1 on disk, switching works while pending, "
+          "refused once approved")
+
+    dropped = p.discard_other_takes(2)
+    assert dropped == ["clip_002_take1"]
+    assert os.path.isfile(os.path.join(p.trash_dir, "clip_002_take1.mp4"))
+    assert [t["take"] for t in p.takes_of(2)] == [2]
+    print("5. discard_other_takes trashed the unselected take")
 
     # clip 3: render then reject
     _fake_pair(p, "clip_003_take1")
@@ -78,7 +99,7 @@ def main():
     p.reject()
     assert p.pending() is None and len(p.clips) == 2
     assert p.next_save() == (3, 1, "clip_003_take1")
-    print("5. reject dropped clip 3 to .trash/, next save is clip 3 again")
+    print("6. reject dropped clip 3 to .trash/, next save is clip 3 again")
 
     # out-of-order renders refused
     for idx, take in ((5, 1), (1, 9)):
@@ -88,7 +109,7 @@ def main():
             raise AssertionError("accepted out-of-order render %d" % idx)
         except ProjectError:
             pass
-    print("6. out-of-order renders refused")
+    print("7. out-of-order renders refused")
 
     # reopen clip 1: cascade drops clip 2
     assert p.cascade_of(1) == ["clip_002_take2"]
@@ -97,15 +118,19 @@ def main():
     assert p.pending()["basename"] == "clip_001_take1"
     assert p.chain_active() is False
     assert p.next_save() == (1, 2, "clip_001_take2")
-    print("7. reopen(1) cascaded clip 2 to .trash/, clip 1 pending again")
+    print("8. reopen(1) cascaded clip 2 to .trash/, clip 1 pending again")
 
     # containment: crafted basename and symlink escape both refused
+    # reject now walks the takes list, so corrupt that too
     p.clips[-1]["basename"] = "../project"
+    p.clips[-1]["takes"] = [{"take": 1, "basename": "../project"}]
     try:
         p.reject()
         raise AssertionError("crafted basename was trashed")
     except ProjectError:
         p.clips[-1]["basename"] = "clip_001_take1"
+        p.clips[-1]["takes"] = [{"take": 1,
+                                 "basename": "clip_001_take1"}]
     victim = os.path.join(out, "innocent.txt")
     open(victim, "w").write("do not delete")
     link = os.path.join(p.clips_dir, "clip_001_take1.mp4")
@@ -119,7 +144,7 @@ def main():
     assert os.path.isfile(victim)
     os.unlink(link)
     _fake_pair(p, "clip_001_take1")
-    print("8. crafted basename and symlink escape both refused, "
+    print("9. crafted basename and symlink escape both refused, "
           "victim intact")
 
     # atomic write: a corrupt manifest never half-overwrites; simulate by
@@ -130,7 +155,7 @@ def main():
     assert data["version"] == 1 and data["clips"] == []
     stray = [f for f in os.listdir(p.root) if f.startswith(".manifest_")]
     assert not stray, stray
-    print("9. manifest valid JSON after every transition, no temp strays")
+    print("10. manifest valid JSON after every transition, no temp strays")
 
     # invariant check on load: hand-corrupt and confirm refusal
     data["clips"] = [{"index": 2, "take": 1, "status": "approved",
@@ -142,7 +167,7 @@ def main():
         raise AssertionError("corrupt manifest loaded")
     except ProjectError:
         pass
-    print("10. corrupt manifest (index/position disagreement) refused "
+    print("11. corrupt manifest (index/position disagreement) refused "
           "at load")
 
     # tokens changed across the life; purge works
@@ -152,7 +177,7 @@ def main():
     assert p2.mtime_token() != tok0
     p2.purge_trash()
     assert not os.path.isdir(p2.trash_dir)
-    print("11. IS_CHANGED token moved, purge cleared .trash/")
+    print("12. IS_CHANGED token moved, purge cleared .trash/")
 
     print("all checks passed")
 

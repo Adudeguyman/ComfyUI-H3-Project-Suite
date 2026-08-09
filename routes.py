@@ -119,6 +119,55 @@ def _register():
         p.purge_trash()
         return _state(p)
 
+    def _safe_export_name(raw, fallback):
+        """A plain .mp4 filename inside the project root, never a path."""
+        import re as _re
+        name = os.path.basename((raw or "").strip())
+        name = _re.sub(r"[^A-Za-z0-9 ._-]", "", name)
+        if name.lower().endswith(".mp4"):
+            name = name[:-4]
+        name = name.strip(" .")
+        if not name:
+            name = fallback
+        return name + ".mp4"
+
+    def _suggest_export(p, preview):
+        """First free name: base.mp4, then base_002.mp4, base_003.mp4..."""
+        base = "%s_%s" % (p.name, "preview" if preview else "master")
+        if not os.path.exists(os.path.join(p.root, base + ".mp4")):
+            return base + ".mp4"
+        n = 2
+        while os.path.exists(os.path.join(p.root, "%s_%03d.mp4" % (base, n))):
+            n += 1
+        return "%s_%03d.mp4" % (base, n)
+
+    @routes.get("/h3_suite/project/export_name")
+    async def export_name(request):
+        try:
+            p = _project(request)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        preview = request.rel_url.query.get("preview") in ("1", "true")
+        return web.json_response({"suggested": _suggest_export(p, preview)})
+
+    @routes.post("/h3_suite/project/select_take")
+    @_json_post
+    def select_take(body):
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        p.select_take(int(body.get("index")), int(body.get("take")))
+        return _state(p)
+
+    @routes.post("/h3_suite/project/discard_takes")
+    @_json_post
+    def discard_takes(body):
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        dropped = p.discard_other_takes(int(body.get("index")))
+        out = _state(p)
+        out["dropped"] = dropped
+        return out
+
     @routes.post("/h3_suite/project/open_folder")
     @_json_post
     def open_folder(body):
@@ -179,9 +228,16 @@ def _register():
                 fh.write("file '%s'\n"
                          % p.clip_video_path(c["basename"]).replace("'",
                                                                     "'\\''"))
-        master = os.path.join(
-            p.root, "%s%s.mp4" % (p.name, "_preview" if preview
-                                  else "_master"))
+        # no explicit name means the first FREE name, never a silent
+        # overwrite of a master someone already kept
+        default = _suggest_export(p, preview)[:-4]
+        fname = _safe_export_name(body.get("filename"), default)
+        master = os.path.join(p.root, fname)
+        real = os.path.realpath(master)
+        if os.path.dirname(real) != os.path.realpath(p.root):
+            raise ProjectError(
+                "h3_suite: export filename must stay in the project "
+                "folder.")
         # identical-format clips by construction: stream copy, no re-encode
         proc = subprocess.run(
             [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,

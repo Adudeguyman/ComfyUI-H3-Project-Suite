@@ -245,13 +245,20 @@ class Project:
                     "the pair must be written before it is recorded."
                     % (index, take, p))
         pend = self.pending()
+        prior_takes = []
         if pend is not None:
             if pend["index"] != index:
                 raise ProjectError(
                     "h3_suite: rendered clip %d while clip %d is pending; "
                     "approve or reject the pending clip first."
                     % (index, pend["index"]))
-            self._trash_pair(pend["basename"])
+            # keep the superseded take on disk so it can be compared and
+            # re-selected; disk cost is bounded by discard_other_takes()
+            prior_takes = list(pend.get("takes") or [])
+            if not any(t["take"] == pend["take"] for t in prior_takes):
+                prior_takes.append({"take": pend["take"],
+                                    "basename": pend["basename"],
+                                    "meta": pend.get("meta")})
             self.clips.pop()
         elif index != len(self.clips) + 1:
             raise ProjectError(
@@ -266,9 +273,67 @@ class Project:
         }
         if meta:
             entry["meta"] = dict(meta)
+        takes = [t for t in prior_takes if t["take"] != take]
+        takes.append({"take": take, "basename": basename, "meta": meta})
+        entry["takes"] = sorted(takes, key=lambda t: t["take"])
         self.clips.append(entry)
         self._write()
         return basename
+
+    def takes_of(self, index):
+        entry = self._entry(index)
+        return list(entry.get("takes")
+                    or [{"take": entry["take"],
+                         "basename": entry["basename"],
+                         "meta": entry.get("meta")}])
+
+    def select_take(self, index, take):
+        """Point a pending clip at one of its other takes.
+
+        Only the pending clip can switch: an approved clip is what later
+        clips were conditioned on, so changing it silently would break
+        the chain. Reopen it first, which states the cascade.
+        """
+        entry = self._entry(index)
+        if entry["status"] != "pending":
+            raise ProjectError(
+                "h3_suite: clip %d is %s; only a pending clip can switch "
+                "takes. Reopen it first." % (index, entry["status"]))
+        take = int(take)
+        match = [t for t in self.takes_of(index) if t["take"] == take]
+        if not match:
+            raise ProjectError(
+                "h3_suite: clip %d has no take %d (available: %s)."
+                % (index, take,
+                   ", ".join(str(t["take"]) for t in self.takes_of(index))))
+        chosen = match[0]
+        video, lat, _side = self._paths(chosen["basename"])
+        for path in (video, lat):
+            if not os.path.isfile(path):
+                raise ProjectError(
+                    "h3_suite: take %d's files are gone (%s); it cannot be "
+                    "selected." % (take, os.path.basename(path)))
+        entry["take"] = take
+        entry["basename"] = chosen["basename"]
+        if chosen.get("meta"):
+            entry["meta"] = dict(chosen["meta"])
+        self._write()
+        return entry
+
+    def discard_other_takes(self, index):
+        """Trash every take of a clip except the selected one."""
+        entry = self._entry(index)
+        keep = entry["basename"]
+        dropped = []
+        for t in self.takes_of(index):
+            if t["basename"] == keep:
+                continue
+            self._trash_pair(t["basename"])
+            dropped.append(t["basename"])
+        entry["takes"] = [{"take": entry["take"], "basename": keep,
+                           "meta": entry.get("meta")}]
+        self._write()
+        return dropped
 
     def approve(self):
         pend = self.pending()
@@ -283,7 +348,8 @@ class Project:
         pend = self.pending()
         if pend is None:
             raise ProjectError("h3_suite: nothing is pending to reject.")
-        self._trash_pair(pend["basename"])
+        for t in self.takes_of(pend["index"]):
+            self._trash_pair(t["basename"])
         self.clips.pop()
         self._write()
         return pend
@@ -303,8 +369,9 @@ class Project:
             raise ProjectError("h3_suite: clip %d is %s, not approved."
                                % (index, target["status"]))
         dropped = [c["basename"] for c in self.clips[index:]]
-        for basename in dropped:
-            self._trash_pair(basename)
+        for c in self.clips[index:]:
+            for t in self.takes_of(c["index"]):
+                self._trash_pair(t["basename"])
         self.clips = self.clips[:index]
         target["status"] = "pending"
         self._write()
