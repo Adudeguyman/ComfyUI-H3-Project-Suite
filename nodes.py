@@ -253,6 +253,14 @@ class H3Context:
                                "ignored."}),
             },
             "optional": {
+                "enabled": ("BOOLEAN", {
+                    "forceInput": True,
+                    "tooltip": "Wire the Project Hub's chain_active here. "
+                               "False makes this node (and, via "
+                               "trim_frames=0, the Trim node) pass "
+                               "everything through untouched, so clip 1 of "
+                               "an empty project renders with no manual "
+                               "bypassing at all."}),
                 "context_frames": ("IMAGE", {
                     "tooltip": "Decoded frames of the previous clip. Required "
                                "when video_source is 'frames'; ignored on the "
@@ -437,7 +445,14 @@ class H3Context:
               encode_mode, anchor_mode, crop, audio_context_length=22,
               audio_mode="timeline", video_source="frames",
               context_frames=None, context_latent=None, audio_vae=None,
-              context_audio=None):
+              context_audio=None, enabled=True):
+        if enabled is False:
+            # inert passthrough: conditioning untouched, trim 0 makes the
+            # Trim node a no-op too. The whole chain path disarms off one
+            # boolean instead of a bypass ritual.
+            _LOG.info("h3_suite: motion context disabled (chain inactive); "
+                      "passing conditioning through untouched")
+            return (conditioning, 0)
         if not is_applied():
             raise RuntimeError(
                 "h3_suite: the layout patch is not active, so interior "

@@ -25,4 +25,19 @@ _apply_payload_patch()
 
 from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
+try:
+    from .project_nodes import (NODE_CLASS_MAPPINGS as _PN,
+                                NODE_DISPLAY_NAME_MAPPINGS as _PD)
+    NODE_CLASS_MAPPINGS.update(_PN)
+    NODE_DISPLAY_NAME_MAPPINGS.update(_PD)
+except Exception:  # torch/folder_paths absent in bare test environments
+    import logging as _logging
+    _logging.getLogger("h3_suite").exception(
+        "h3_suite: project nodes failed to load")
+
+try:
+    from . import routes as _routes  # registers /h3_suite/ endpoints
+except Exception:
+    pass
+
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
