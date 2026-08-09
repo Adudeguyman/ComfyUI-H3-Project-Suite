@@ -228,7 +228,6 @@ class H3Context:
         return {
             "required": {
                 "conditioning": ("CONDITIONING",),
-                "vae": ("VAE",),
                 "latent": ("LATENT",),
                 "context_length": ("INT", {
                     "default": 5, "min": 1, "max": 39,
@@ -283,6 +282,11 @@ class H3Context:
                                "ignored."}),
             },
             "optional": {
+                "vae": ("VAE", {
+                    "tooltip": "Video VAE, used ONLY to encode context_frames "
+                               "when video_source is 'frames'. The latent "
+                               "path never encodes anything, so leave this "
+                               "unwired there."}),
                 "enabled": ("BOOLEAN", {
                     "forceInput": True,
                     "tooltip": "Wire the Project Hub's chain_active here. "
@@ -471,9 +475,9 @@ class H3Context:
                   covered)
         return blocks, offsets, covered
 
-    def apply(self, conditioning, vae, latent, context_length,
+    def apply(self, conditioning, latent, context_length,
               encode_mode, anchor_mode, crop, audio_context_length=22,
-              audio_mode="timeline", video_source="frames",
+              audio_mode="timeline", video_source="frames", vae=None,
               context_frames=None, context_latent=None, audio_vae=None,
               context_audio=None, enabled=True):
         if enabled is False:
@@ -497,6 +501,12 @@ class H3Context:
                 context_latent, context_length, video, frame_count)
             span = n
         else:
+            if vae is None:
+                raise ValueError(
+                    "h3_suite: video_source is 'frames' needs the video vae "
+                    "wired to encode context_frames. Wire it, or switch "
+                    "video_source to 'latent' - that path slices the pinned "
+                    "video straight out of context_latent and needs no VAE.")
             if context_frames is None:
                 raise ValueError(
                     "h3_suite: video_source is 'frames' but context_frames is "

@@ -276,6 +276,26 @@ def main():
     print("latent video path: 7 blocks are steps 30..36 of the source "
           "latent verbatim, offsets phase-aligned, VAE untouched, trim 22")
 
+    # the latent path must work with NO vae wired at all
+    captured.clear()
+    out4, trim4 = node.apply(
+        conditioning=[["c", {}]], latent=target,
+        context_length=22, encode_mode="video", anchor_mode="head",
+        crop="disabled", audio_context_length=22, audio_mode="timeline",
+        video_source="latent", context_latent=prev_marked)
+    assert len(captured["minimax_keyframes"]) == 7 and trim4 == 22
+    try:
+        node.apply(conditioning=[["c", {}]], latent=target,
+                   context_length=22, encode_mode="video",
+                   anchor_mode="head", crop="disabled",
+                   audio_context_length=22, audio_mode="timeline",
+                   video_source="frames", context_frames=context)
+        raise AssertionError("frames path ran without a vae")
+    except ValueError as exc:
+        assert "needs the video vae" in str(exc), str(exc)
+    print("vae optional: latent path runs unwired, frames path refuses "
+          "with a clear message")
+
     # guards: unwired latent, resolution mismatch, no usable run
     captured.clear()
     for kwargs, expect in [
