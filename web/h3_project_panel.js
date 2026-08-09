@@ -304,9 +304,14 @@ class ProjectModal {
       e.stopPropagation();
     };
     this.branchNote = el("span", { class: "h3p-hint" });
+    this.branchTake = el("select", { class: "h3p-select",
+      onchange: () => this.updateBranchNote() });
+    this.branchTakeWrap = el("div", { class: "h3p-takes" },
+      el("span", { class: "h3p-takelabel", text: "from take" }),
+      this.branchTake);
     this.branchRow = el("div", { class: "h3p-namewrap" },
       el("span", { class: "h3p-takelabel", text: "branch as" }),
-      this.branchInput,
+      this.branchInput, this.branchTakeWrap,
       el("button", { class: "h3p-btn ok", text: "Create branch",
                      onclick: () => this.doBranch() }),
       el("button", { class: "h3p-btn", text: "Cancel",
@@ -491,20 +496,47 @@ class ProjectModal {
       const r = await api.fetchApi(
         `/h3_suite/project/branch_name?name=` +
         `${encodeURIComponent(this.name())}&index=${index}`);
-      const { suggested, error } = await r.json();
-      if (error) throw new Error(error);
-      this.branchInput.value = suggested;
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      this.branchInput.value = data.suggested;
+      const takes = data.takes || [];
+      this.branchTake.innerHTML = "";
+      for (const t of takes) {
+        const secs = t.meta?.duration ? ` \u00b7 ${t.meta.duration}s` : "";
+        const where = t.location === "trash" ? " \u00b7 from trash" : "";
+        this.branchTake.append(el("option", {
+          value: String(t.take),
+          text: `take ${t.take}${secs}${where}` +
+                (t.take === data.current_take ? " (approved)" : ""),
+        }));
+      }
+      this.branchTake.value = String(data.current_take);
+      // a clip with one surviving take needs no chooser
+      this.branchTakeWrap.style.display = takes.length > 1 ? "flex" : "none";
+      this._branchApproved = data.current_take;
     } catch (e) {
       this.branchInput.value = `${this.name()}_from${index}`;
+      this.branchTakeWrap.style.display = "none";
+      this._branchApproved = null;
     }
-    const n = this.state?.clips?.length || 0;
-    this.branchNote.textContent =
-      `copies clips 1\u2013${index} into a new project; ` +
-      (n > index ? `clips ${index + 1}\u2013${n} stay here untouched`
-                 : "this project is untouched");
+    this.updateBranchNote();
     this.branchRow.classList.add("on");
     this.branchInput.focus();
     this.branchInput.select();
+  }
+
+  updateBranchNote() {
+    const index = this._branchIndex;
+    const n = this.state?.clips?.length || 0;
+    const chosen = Number(this.branchTake.value);
+    const swapped = this._branchApproved != null &&
+                    chosen !== this._branchApproved;
+    this.branchNote.textContent =
+      `copies clips 1\u2013${index} into a new project` +
+      (swapped ? `, using take ${chosen} of clip ${index} as the new tail ` +
+                 `instead of the approved take ${this._branchApproved}` : "") +
+      `; ` + (n > index ? `clips ${index + 1}\u2013${n} stay here untouched`
+                        : "this project is untouched");
   }
 
   async doBranch() {
@@ -515,6 +547,8 @@ class ProjectModal {
     try {
       const out = await post("/h3_suite/project/branch", {
         name: this.name(), index: this._branchIndex, new_name: newName,
+        take: this.branchTakeWrap.style.display === "none"
+          ? null : Number(this.branchTake.value),
       });
       toast(`branched into "${newName}" at clip ${this._branchIndex}`);
       this.setName(newName);
@@ -1004,7 +1038,9 @@ class ProjectModal {
   }
 
   paintTakes(clip) {
-    const takes = clip.takes || [];
+    // trashed takes stay in the manifest for branching, but they are not
+    // selectable as the live take
+    const takes = (clip.takes || []).filter((t) => !t.trashed);
     this.takeSel.innerHTML = "";
     for (const t of takes) {
       const secs = t.meta?.duration ? ` \u00b7 ${t.meta.duration}s` : "";

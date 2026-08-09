@@ -98,15 +98,22 @@ def suggest_branch_name(output_dir, source_name, at_index):
     return "%s_%03d" % (base, n)
 
 
-def branch_project(output_dir, source_name, at_index, new_name):
+def branch_project(output_dir, source_name, at_index, new_name,
+                   at_take=None):
     """Fork a chain at an approved clip into a brand new project.
 
     Clips 1..at_index are carried over as approved, so the branch's next
     render is clip at_index+1, conditioned on the same latent the source
     used. The source project is not touched at all.
 
-    Only each clip's SELECTED take comes along; alternates stay behind in
-    the source. Files are genuinely COPIED, not linked: a branch has to be
+    `at_take` picks which take of the branch-point clip becomes the new
+    chain's tail. Any take is legitimate: every take of clip N was
+    conditioned on the same clip N-1, so the one that was approved holds
+    no special position in the chain -- it was just the one you kept.
+    A superseded take is recovered from .trash/ if that is where it went.
+
+    Earlier clips come across at their SELECTED takes; alternates stay
+    behind in the source. Files are genuinely COPIED, not linked: a branch has to be
     an independent workspace, so purging, moving, syncing or archiving
     either project can never reach into the other. That costs real disk -
     an AV latent is the expensive half - which is the price of the two
@@ -120,7 +127,28 @@ def branch_project(output_dir, source_name, at_index, new_name):
             "h3_suite: clip %d is %s; branch from an approved clip so the "
             "new chain has a settled tail to continue from."
             % (at_index, entry["status"]))
-    carried = src.clips[:at_index]
+    carried = [dict(c) for c in src.clips[:at_index]]
+    if at_take is not None and int(at_take) != entry["take"]:
+        at_take = int(at_take)
+        options = src.available_takes(at_index)
+        match = [t for t in options if t["take"] == at_take]
+        if not match:
+            raise ProjectError(
+                "h3_suite: clip %d has no take %d with files on disk "
+                "(available: %s). A purged take cannot be branched from."
+                % (at_index, at_take,
+                   ", ".join("%d(%s)" % (t["take"], t["location"])
+                             for t in options) or "none"))
+        chosen = match[0]
+        tip = carried[-1]
+        tip["take"] = chosen["take"]
+        tip["basename"] = chosen["basename"]
+        if chosen.get("meta"):
+            tip["meta"] = dict(chosen["meta"])
+        else:
+            tip.pop("meta", None)
+        tip["takes"] = None            # rebuilt below from the choice
+
     not_approved = [c["index"] for c in carried
                     if c["status"] != "approved"]
     if not_approved:
@@ -140,7 +168,14 @@ def branch_project(output_dir, source_name, at_index, new_name):
     total_bytes = 0
     try:
         for c in carried:
-            for s_path in src._paths(c["basename"]):
+            where = src.locate_pair(c["basename"])
+            if where is None:
+                raise ProjectError(
+                    "h3_suite: clip %d take %d (%s) has no files left in "
+                    "the source project." % (c["index"], c["take"],
+                                             c["basename"]))
+            for ext in (VIDEO_EXT, LATENT_EXT, SIDECAR_EXT):
+                s_path = os.path.join(where, c["basename"] + ext)
                 if not os.path.isfile(s_path):
                     continue                      # sidecar is optional
                 d_path = os.path.join(dest.clips_dir,
@@ -365,6 +400,38 @@ class Project:
         self._write()
         return basename
 
+    def locate_pair(self, basename):
+        """Where a take's files actually are: clips/, .trash/, or gone.
+
+        A superseded or rejected take keeps its name; only its folder
+        changes. Branching wants to reach those, so resolution has to
+        cover both without ever leaving the project.
+        """
+        if not _BASENAME_RE.match(basename):
+            raise ProjectError("h3_suite: %r is not a clip basename."
+                               % basename)
+        for folder in (self.clips_dir, self.trash_dir):
+            video = os.path.join(folder, basename + VIDEO_EXT)
+            lat = os.path.join(folder, basename + LATENT_EXT)
+            if os.path.isfile(video) and os.path.isfile(lat):
+                return folder
+        return None
+
+    def available_takes(self, index):
+        """Every take of a clip that still has files, with its location."""
+        out = []
+        for t in self.takes_of(index):
+            where = self.locate_pair(t["basename"])
+            if where is None:
+                continue
+            out.append({
+                "take": t["take"], "basename": t["basename"],
+                "meta": t.get("meta"),
+                "location": ("trash" if where == self.trash_dir
+                             else "clips"),
+            })
+        return sorted(out, key=lambda t: t["take"])
+
     def takes_of(self, index):
         entry = self._entry(index)
         return list(entry.get("takes")
@@ -392,12 +459,15 @@ class Project:
                 % (index, take,
                    ", ".join(str(t["take"]) for t in self.takes_of(index))))
         chosen = match[0]
-        video, lat, _side = self._paths(chosen["basename"])
-        for path in (video, lat):
-            if not os.path.isfile(path):
-                raise ProjectError(
-                    "h3_suite: take %d's files are gone (%s); it cannot be "
-                    "selected." % (take, os.path.basename(path)))
+        where = self.locate_pair(chosen["basename"])
+        if where is None:
+            raise ProjectError(
+                "h3_suite: take %d's files are gone; it was purged and "
+                "cannot be selected." % take)
+        if where == self.trash_dir:
+            raise ProjectError(
+                "h3_suite: take %d is in .trash/. Branch from it to build "
+                "on it, or restore it by hand into clips/." % take)
         entry["take"] = take
         entry["basename"] = chosen["basename"]
         if chosen.get("meta"):
@@ -410,13 +480,20 @@ class Project:
         entry = self._entry(index)
         keep = entry["basename"]
         dropped = []
+        takes = []
         for t in self.takes_of(index):
-            if t["basename"] == keep:
-                continue
-            self._trash_pair(t["basename"])
-            dropped.append(t["basename"])
-        entry["takes"] = [{"take": entry["take"], "basename": keep,
-                           "meta": entry.get("meta")}]
+            rec = dict(t)
+            if t["basename"] != keep:
+                self._trash_pair(t["basename"])
+                dropped.append(t["basename"])
+                # remember it: the files still exist in .trash/ until a
+                # purge, and a later branch may want one of them as its
+                # tail. Forgetting here would strand recoverable takes.
+                rec["trashed"] = True
+            else:
+                rec.pop("trashed", None)
+            takes.append(rec)
+        entry["takes"] = takes
         self._write()
         return dropped
 

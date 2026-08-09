@@ -175,8 +175,14 @@ def _register():
         name = request.rel_url.query.get("name")
         index = int(request.rel_url.query.get("index", 1))
         try:
-            return web.json_response({"suggested": suggest_branch_name(
-                fp.get_output_directory(), name, index)})
+            p = Project(fp.get_output_directory(), name)
+            entry = p._entry(index)
+            return web.json_response({
+                "suggested": suggest_branch_name(
+                    fp.get_output_directory(), name, index),
+                "takes": p.available_takes(index),
+                "current_take": entry["take"],
+            })
         except ProjectError as exc:
             return web.json_response({"error": str(exc)}, status=400)
 
@@ -185,8 +191,11 @@ def _register():
     def branch(body):
         import folder_paths as fp
         from .project import branch_project
+        take = body.get("take")
         dest = branch_project(fp.get_output_directory(), body.get("name"),
-                              int(body.get("index")), body.get("new_name"))
+                              int(body.get("index")), body.get("new_name"),
+                              at_take=None if take in (None, "")
+                              else int(take))
         out = _state(dest)
         out["branched_from"] = dest.branched_from
         return out

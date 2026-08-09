@@ -90,8 +90,14 @@ def main():
     dropped = p.discard_other_takes(2)
     assert dropped == ["clip_002_take1"]
     assert os.path.isfile(os.path.join(p.trash_dir, "clip_002_take1.mp4"))
-    assert [t["take"] for t in p.takes_of(2)] == [2]
-    print("5. discard_other_takes trashed the unselected take")
+    # the take is remembered as trashed, not forgotten: its files still
+    # exist and a later branch can build on them
+    assert [t["take"] for t in p.takes_of(2)] == [1, 2]
+    assert p.takes_of(2)[0].get("trashed") is True
+    assert {t["take"]: t["location"] for t in p.available_takes(2)} == {
+        1: "trash", 2: "clips"}
+    print("5. discard_other_takes trashed the unselected take but kept it "
+          "discoverable for branching")
 
     # clip 3: render then reject
     _fake_pair(p, "clip_003_take1")
@@ -206,6 +212,30 @@ def main():
     assert br2.tail_latent_path().endswith("clip_002_take1.safetensors")
     print("13. branch at clip 2: independent copies, source deletable, "
           "next render clip_003_take1")
+
+    # branch from a take that was never approved, recovered from .trash/
+    tk = Project(out, "Takes", create=True)
+    for ext in (".mp4", ".safetensors"):
+        with open(os.path.join(tk.clips_dir, "clip_001_take1" + ext),
+                  "wb") as fh:
+            fh.write(os.urandom(64))
+    tk.record_render(1, 1, {"duration": 5.0}); tk.approve()
+    for t in (1, 2, 3):
+        base = "clip_002_take%d" % t
+        for ext in (".mp4", ".safetensors"):
+            with open(os.path.join(tk.clips_dir, base + ext), "wb") as fh:
+                fh.write(bytes([t]) * 64)
+        tk.record_render(2, t, {"duration": 5.0 + t})
+    tk.approve()                       # take 3 is the approved one
+    tk.discard_other_takes(2)          # takes 1 and 2 go to .trash/
+    alt = branch_project(out, "Takes", 2, "Takes_alt", at_take=2)
+    assert alt.chain_tail()["basename"] == "clip_002_take2"
+    assert alt.next_save() == (3, 1, "clip_003_take1")
+    with open(os.path.join(alt.clips_dir, "clip_002_take2.mp4"), "rb") as fh:
+        assert fh.read() == bytes([2]) * 64
+    assert Project(out, "Takes")._entry(2)["take"] == 3, "source changed"
+    print("14. branched on clip 2 take 2 (never approved, sitting in "
+          "trash); source still on take 3")
 
     print("all checks passed")
 
