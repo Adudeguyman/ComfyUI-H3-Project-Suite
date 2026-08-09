@@ -44,7 +44,7 @@ You need `ffmpeg` on your system for the export button. Everything else ships wi
 
 ## The four nodes
 
-You wire these up once. A ready-made workflow is in `example_workflows/`.
+You wire these up once, then never touch them again.
 
 | Node | What it does |
 | --- | --- |

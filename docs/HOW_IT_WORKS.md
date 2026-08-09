@@ -311,6 +311,5 @@ Both should print their checks and finish with a pass line.
 | `tests/seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
 | `tests/` | Standalone tests; run without ComfyUI (numpy only, except the mp4 probe which needs PyAV and skips if absent). |
 
-The `example_workflows/` folder contains both the original compact FL2VA demo
-and seitanism's six-clip Ref2VA/global-reference chain. See its README for the
-additional workflow dependencies.
+See `example_workflows/README.md` for the demo workflows and the extra node
+packs any of them depend on.
