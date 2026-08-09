@@ -540,15 +540,30 @@ class ProjectModal {
     this.standby.pause();
     this.standby.style.display = "none";
     this.video.style.display = "";
+    this.video.muted = false;   // may still be muted from the warm pass
     this.standbySeg = null;
   }
 
   preload(j) {
     const seg = this.timeline?.[j];
     if (!seg || this.standbySeg === j) return;
-    this.standby.src = videoURL(this.name(), seg.clip.basename);
-    this.standby.currentTime = 0;
+    const v = this.standby;
     this.standbySeg = j;
+    v.muted = true;
+    v.src = videoURL(this.name(), seg.clip.basename);
+    // preload="auto" buffers bytes but engines defer decoder init until
+    // play; warm it: one muted frame, pause, rewind. The swap then starts
+    // on a live pipeline instead of paying spin-up at the join.
+    v.onloadeddata = () => {
+      v.onloadeddata = null;
+      if (this.standbySeg !== j) return;
+      v.play().then(() => requestAnimationFrame(() => {
+        if (this.standbySeg !== j) return;
+        v.pause();
+        try { v.currentTime = 0; } catch (e) { /* fine */ }
+        v.muted = false;
+      })).catch(() => { v.muted = false; });
+    };
   }
 
   async seekGlobal(globalT, play) {
