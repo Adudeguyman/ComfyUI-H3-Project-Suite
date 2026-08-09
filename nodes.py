@@ -35,14 +35,23 @@ import os
 import comfy.utils
 import folder_paths
 import node_helpers
+import torch
 
 try:
     from safetensors.torch import load_file as _st_load, save_file as _st_save
 except ImportError:  # ComfyUI always ships safetensors; belt and braces
     _st_load = _st_save = None
 
-from .patch_layout import MC_KEY, MC_AUDIO_KEY, is_applied
-from .patch_payload import is_applied as payload_patch_applied
+from .patch_layout import (
+    MC_KEY,
+    MC_AUDIO_KEY,
+    apply_patch as apply_layout_patch,
+    is_applied,
+)
+from .patch_payload import (
+    apply_patch as apply_payload_patch,
+    is_applied as payload_patch_applied,
+)
 
 try:
     import torchaudio
@@ -50,6 +59,28 @@ except ImportError:
     torchaudio = None
 
 _LOG = logging.getLogger("h3_suite")
+
+
+def _activate_inline_patches():
+    """Opt this execution path into the two marker-gated H3 patches.
+
+    Importing the pack only registers nodes; nothing in ComfyUI changes
+    until an H3 Context node actually runs. Both wrappers call the original
+    implementation unchanged for unmarked graphs, so stock H3 workflows
+    queued after an opted-in one in the same process keep stock behavior.
+    """
+    layout_ok = apply_layout_patch()
+    payload_ok = apply_payload_patch()
+    if not layout_ok or not is_applied():
+        raise RuntimeError(
+            "h3_suite: the inline layout patch could not be enabled, so "
+            "interior anchors would be rejected by ComfyUI. Check the log "
+            "for the self-test failure reason.")
+    if not payload_ok or not payload_patch_applied():
+        raise RuntimeError(
+            "h3_suite: the inline payload patch could not be enabled. "
+            "Ref2VA refs could overwrite the pinned video latents; refusing "
+            "to render a silently wrong clip.")
 
 FRAME_PER_TOKEN = (1, 4, 4, 4, 4)
 FPS = 24  # H3's native rate; audio latents run at 40 Hz, hence FRAME_RESCALE 5/3
@@ -152,13 +183,12 @@ def _audio_tail_from_latent(latent, a_frames):
     generated H3 latent, skipping the decode -> re-encode round trip.
 
     Returns (tail latent [1, C, 2, rt], rt, overhang) where rt counts
-    40 Hz latent steps and overhang is the fraction of a step by which the
-    clip's audio grid extends past its last pixel frame. H3 rounds the
-    audio grid UP (124 frames want 206.67 steps, the layout allocates
-    207), so the latent's final step reaches ~overhang/40 s beyond the
-    last frame. The decoded-audio path never sees this because match_tail
-    cuts it; on this path the caller compensates the placement with it,
-    so the pinned content lands exactly where its samples actually sit.
+    40 Hz latent steps and overhang is the signed fraction of a step between
+    the clip's audio grid and its last pixel frame. H3 rounds to the NEAREST
+    audio step: 124 frames want 206.67 and become 207 (+0.33), while 362
+    frames want 603.33 and become 603 (-0.33). The caller compensates the
+    placement with this signed offset so the pinned content lands exactly
+    where its samples actually sit.
     """
     parts = _streams_from_latent(latent)
     if len(parts) < 2:
@@ -176,7 +206,7 @@ def _audio_tail_from_latent(latent, a_frames):
     total_t = int(audio.shape[-1])
     frames = _pixel_frames(int(video.shape[2]))
     overhang = total_t - FRAME_RESCALE * frames
-    if not (0.0 <= overhang < 1.0):
+    if not (-0.5 < overhang < 0.5):
         _LOG.warning(
             "h3_suite: context_latent audio grid is unexpected "
             "(%d steps for %d frames); assuming no overhang.", total_t, frames)
@@ -449,15 +479,12 @@ class H3Context:
         if enabled is False:
             # inert passthrough: conditioning untouched, trim 0 makes the
             # Trim node a no-op too. The whole chain path disarms off one
-            # boolean instead of a bypass ritual.
+            # boolean instead of a bypass ritual. No patches are activated
+            # on this path - a disabled chain leaves ComfyUI stock.
             _LOG.info("h3_suite: motion context disabled (chain inactive); "
                       "passing conditioning through untouched")
             return (conditioning, 0)
-        if not is_applied():
-            raise RuntimeError(
-                "h3_suite: the layout patch is not active, so interior "
-                "anchors would be rejected by ComfyUI. Check the startup log for "
-                "the self-test failure reason.")
+        _activate_inline_patches()
 
         video = _video_from_latent(latent)
         latent_t = int(video.shape[2])
@@ -622,10 +649,10 @@ class H3ContextTrim:
                                "Create Video."}),
                 "match_tail": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Truncate the audio so its duration equals "
-                               "frames/fps exactly. H3 rounds its audio grid up, "
-                               "so each clip carries about 8ms of extra sound "
-                               "that accumulates at every join in a chain."}),
+                    "tooltip": "Truncate or zero-pad audio so its duration "
+                               "equals frames/fps exactly. H3 rounds its 40 Hz "
+                               "audio grid to the nearest step, producing about "
+                               "8ms of excess or shortage on some lengths."}),
             },
         }
 
@@ -670,9 +697,11 @@ class H3ContextTrim:
                               "(%.2fms) so audio matches %d frames exactly",
                               over, over / sr * 1000.0, frames_left)
                 elif have < want:
-                    _LOG.warning("h3_suite: audio is %.2fms shorter than "
-                                 "%d frames; leaving the tail alone",
-                                 (want - have) / sr * 1000.0, frames_left)
+                    missing = want - have
+                    waveform = torch.nn.functional.pad(waveform, (0, missing))
+                    _LOG.info("h3_suite: tail padded %d zero samples "
+                              "(%.2fms) so audio matches %d frames exactly",
+                              missing, missing / sr * 1000.0, frames_left)
 
             out_audio = {"waveform": waveform, "sample_rate": sr}
             _LOG.info("h3_suite: %d frames / %.4fs picture, %.4fs sound, "
