@@ -1,0 +1,351 @@
+"""Project manifests: the single source of truth for a clip chain.
+
+A project is one folder under <output>/h3_projects/<name>/ holding a
+manifest (project.json), a clips/ folder of atomic (mp4, safetensors)
+pairs, and a .trash/ folder for rejected pairs. The manifest is a plain
+list in chain order -- position IS the clip index, there is no separate
+ordering to keep in sync with the conditioning chain:
+
+    {
+      "version": 1,
+      "name": "DesertChase",
+      "clips": [
+        {"index": 1, "take": 1, "status": "approved",
+         "basename": "clip_001_take1", "from": null},
+        {"index": 2, "take": 3, "status": "pending",
+         "basename": "clip_002_take3", "from": "clip_001_take1"}
+      ]
+    }
+
+Invariants this module enforces rather than documents:
+  - at most ONE pending clip, and it is always the LAST entry
+  - every approved clip's pair (mp4 + safetensors) exists on disk
+  - "from" records the basename a clip was conditioned on, making the
+    chain self-describing and broken links detectable
+  - all destructive operations stay inside the project folder (realpath
+    containment + basename pattern check, both, before any move)
+
+Writes are atomic: the manifest is written to a temp file in the same
+folder and os.replace()d over the old one, so a crash mid-write leaves
+the previous manifest intact rather than a half-written JSON.
+"""
+
+import json
+import logging
+import os
+import re
+import shutil
+import tempfile
+
+_LOG = logging.getLogger("h3_suite")
+
+PROJECTS_DIRNAME = "h3_projects"
+MANIFEST_NAME = "project.json"
+CLIPS_DIRNAME = "clips"
+TRASH_DIRNAME = ".trash"
+VERSION = 1
+
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$")
+_BASENAME_RE = re.compile(r"^clip_(\d{3})_take(\d+)$")
+
+VIDEO_EXT = ".mp4"
+LATENT_EXT = ".safetensors"
+
+
+class ProjectError(RuntimeError):
+    """A manifest or filesystem invariant was violated."""
+
+
+def validate_name(name):
+    """A project name must be a safe single path component."""
+    name = (name or "").strip()
+    if not _NAME_RE.match(name):
+        raise ProjectError(
+            "h3_suite: project name %r is not allowed. Use letters, digits, "
+            "spaces, dots, dashes or underscores (max 64 chars, must start "
+            "with a letter or digit)." % name)
+    if name in (".", "..") or os.sep in name or (os.altsep or "/") in name:
+        raise ProjectError("h3_suite: project name %r is not a plain "
+                           "folder name." % name)
+    return name
+
+
+def projects_root(output_dir):
+    return os.path.join(output_dir, PROJECTS_DIRNAME)
+
+
+def list_projects(output_dir):
+    root = projects_root(output_dir)
+    if not os.path.isdir(root):
+        return []
+    out = []
+    for entry in sorted(os.listdir(root)):
+        if os.path.isfile(os.path.join(root, entry, MANIFEST_NAME)):
+            out.append(entry)
+    return out
+
+
+class Project:
+    """One project folder plus its manifest, loaded eagerly.
+
+    Every mutating method rewrites the manifest atomically before
+    returning; there is no separate save() to forget.
+    """
+
+    def __init__(self, output_dir, name, create=False):
+        self.name = validate_name(name)
+        self.root = os.path.realpath(
+            os.path.join(projects_root(output_dir), self.name))
+        # the resolved root must still be inside the projects root; a
+        # symlinked project folder escaping the tree is refused outright
+        expected_parent = os.path.realpath(projects_root(output_dir))
+        if os.path.dirname(self.root) != expected_parent:
+            raise ProjectError(
+                "h3_suite: project folder %r resolves outside the projects "
+                "root; refusing." % self.root)
+        self.manifest_path = os.path.join(self.root, MANIFEST_NAME)
+        self.clips_dir = os.path.join(self.root, CLIPS_DIRNAME)
+        self.trash_dir = os.path.join(self.root, TRASH_DIRNAME)
+        if os.path.isfile(self.manifest_path):
+            self._load()
+        elif create:
+            os.makedirs(self.clips_dir, exist_ok=True)
+            self.clips = []
+            self._write()
+        else:
+            raise ProjectError(
+                "h3_suite: project %r does not exist (no %s in %s)."
+                % (self.name, MANIFEST_NAME, self.root))
+
+    # -- manifest io -------------------------------------------------------
+
+    def _load(self):
+        with open(self.manifest_path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if data.get("version") != VERSION:
+            raise ProjectError(
+                "h3_suite: %s has manifest version %r, this build reads "
+                "version %d." % (self.manifest_path, data.get("version"),
+                                 VERSION))
+        self.clips = list(data.get("clips", []))
+        self._check_invariants()
+
+    def _write(self):
+        self._check_invariants()
+        data = {"version": VERSION, "name": self.name, "clips": self.clips}
+        fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".manifest_",
+                                   suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+            os.replace(tmp, self.manifest_path)
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+
+    def _check_invariants(self):
+        pend = [c for c in self.clips if c["status"] == "pending"]
+        if len(pend) > 1:
+            raise ProjectError("h3_suite: manifest has %d pending clips; "
+                               "the invariant is at most one." % len(pend))
+        if pend and self.clips[-1]["status"] != "pending":
+            raise ProjectError("h3_suite: a pending clip is not the last "
+                               "entry; the manifest is corrupt.")
+        for pos, c in enumerate(self.clips, start=1):
+            if c["index"] != pos:
+                raise ProjectError(
+                    "h3_suite: clip at position %d carries index %d; "
+                    "position and index must agree." % (pos, c["index"]))
+            if not _BASENAME_RE.match(c["basename"]):
+                raise ProjectError("h3_suite: clip basename %r does not "
+                                   "match clip_NNN_takeN." % c["basename"])
+
+    # -- state queries -----------------------------------------------------
+
+    def mtime_token(self):
+        """Cache key for IS_CHANGED: manifest identity + mtime."""
+        try:
+            st = os.stat(self.manifest_path)
+            return "%s:%d" % (self.manifest_path, st.st_mtime_ns)
+        except OSError:
+            return float("NaN")
+
+    def pending(self):
+        if self.clips and self.clips[-1]["status"] == "pending":
+            return self.clips[-1]
+        return None
+
+    def approved(self):
+        return [c for c in self.clips if c["status"] == "approved"]
+
+    def chain_tail(self):
+        """The approved clip the NEXT render continues from, or None."""
+        appr = self.approved()
+        return appr[-1] if appr else None
+
+    def chain_active(self):
+        return self.chain_tail() is not None
+
+    def _paths(self, basename):
+        return (os.path.join(self.clips_dir, basename + VIDEO_EXT),
+                os.path.join(self.clips_dir, basename + LATENT_EXT))
+
+    def tail_latent_path(self):
+        """The latent to condition the next clip on, existence-checked."""
+        tail = self.chain_tail()
+        if tail is None:
+            return None
+        video, lat = self._paths(tail["basename"])
+        if not os.path.isfile(lat):
+            raise ProjectError(
+                "h3_suite: approved clip %d's latent is missing (%s). The "
+                "chain cannot continue from a clip whose latent is gone."
+                % (tail["index"], lat))
+        return lat
+
+    def clip_video_path(self, basename):
+        video, _ = self._paths(basename)
+        return video
+
+    def next_save(self):
+        """(index, take, basename) the next render should write.
+
+        A pending clip means the next run is a RE-ROLL of it: same index,
+        next take. No pending clip means a fresh next index, take 1.
+        """
+        pend = self.pending()
+        if pend is not None:
+            index, take = pend["index"], pend["take"] + 1
+        else:
+            index, take = len(self.clips) + 1, 1
+        return index, take, "clip_%03d_take%d" % (index, take)
+
+    # -- transitions -------------------------------------------------------
+
+    def record_render(self, index, take):
+        """A render finished and its pair is on disk: make it the pending
+        clip. A previous pending take of the same index is superseded and
+        its pair is trashed (the take number preserves it in .trash/)."""
+        basename = "clip_%03d_take%d" % (index, take)
+        video, lat = self._paths(basename)
+        for p in (video, lat):
+            if not os.path.isfile(p):
+                raise ProjectError(
+                    "h3_suite: record_render(%d, %d) but %s is missing; "
+                    "the pair must be written before it is recorded."
+                    % (index, take, p))
+        pend = self.pending()
+        if pend is not None:
+            if pend["index"] != index:
+                raise ProjectError(
+                    "h3_suite: rendered clip %d while clip %d is pending; "
+                    "approve or reject the pending clip first."
+                    % (index, pend["index"]))
+            self._trash_pair(pend["basename"])
+            self.clips.pop()
+        elif index != len(self.clips) + 1:
+            raise ProjectError(
+                "h3_suite: rendered clip %d but the chain is at %d clips; "
+                "the next index must be %d."
+                % (index, len(self.clips), len(self.clips) + 1))
+        tail = self.chain_tail()
+        self.clips.append({
+            "index": index, "take": take, "status": "pending",
+            "basename": basename,
+            "from": tail["basename"] if tail else None,
+        })
+        self._write()
+        return basename
+
+    def approve(self):
+        pend = self.pending()
+        if pend is None:
+            raise ProjectError("h3_suite: nothing is pending to approve.")
+        pend["status"] = "approved"
+        self._write()
+        return pend
+
+    def reject(self):
+        """Drop the pending clip entirely; its pair goes to .trash/."""
+        pend = self.pending()
+        if pend is None:
+            raise ProjectError("h3_suite: nothing is pending to reject.")
+        self._trash_pair(pend["basename"])
+        self.clips.pop()
+        self._write()
+        return pend
+
+    def reopen(self, index):
+        """Set an approved clip back to pending; everything after it was
+        conditioned on content about to change, so it is dropped to trash.
+        Returns the basenames trashed, so a UI can confirm the blast
+        radius BEFORE calling (see cascade_of)."""
+        pend = self.pending()
+        if pend is not None:
+            raise ProjectError(
+                "h3_suite: clip %d is pending; approve or reject it before "
+                "reopening an earlier clip." % pend["index"])
+        target = self._entry(index)
+        if target["status"] != "approved":
+            raise ProjectError("h3_suite: clip %d is %s, not approved."
+                               % (index, target["status"]))
+        dropped = [c["basename"] for c in self.clips[index:]]
+        for basename in dropped:
+            self._trash_pair(basename)
+        self.clips = self.clips[:index]
+        target["status"] = "pending"
+        self._write()
+        return dropped
+
+    def cascade_of(self, index):
+        """What reopen(index) would drop, without doing it."""
+        self._entry(index)
+        return [c["basename"] for c in self.clips[index:]]
+
+    def purge_trash(self):
+        if os.path.isdir(self.trash_dir):
+            shutil.rmtree(self.trash_dir)
+        return True
+
+    # -- internals ---------------------------------------------------------
+
+    def _entry(self, index):
+        if not 1 <= int(index) <= len(self.clips):
+            raise ProjectError("h3_suite: no clip %s in a %d-clip project."
+                               % (index, len(self.clips)))
+        return self.clips[int(index) - 1]
+
+    def _contained(self, path):
+        """realpath containment: path must live inside clips_dir."""
+        real = os.path.realpath(path)
+        root = os.path.realpath(self.clips_dir)
+        return os.path.commonpath([real, root]) == root
+
+    def _trash_pair(self, basename):
+        """Move a clip pair to .trash/, never off-project, never unlink.
+
+        Both checks, always: the basename must match the clip pattern
+        (so a crafted manifest cannot name project.json or ../anything),
+        and every resolved path must live inside clips_dir.
+        """
+        if not _BASENAME_RE.match(basename):
+            raise ProjectError(
+                "h3_suite: refusing to trash %r; not a clip basename."
+                % basename)
+        os.makedirs(self.trash_dir, exist_ok=True)
+        for src in self._paths(basename):
+            if not self._contained(src):
+                raise ProjectError(
+                    "h3_suite: %r resolves outside the project's clips "
+                    "folder; refusing to touch it." % src)
+            if os.path.isfile(src):
+                dst = os.path.join(self.trash_dir, os.path.basename(src))
+                if os.path.exists(dst):  # same basename trashed before
+                    stem, ext = os.path.splitext(dst)
+                    k = 2
+                    while os.path.exists("%s.%d%s" % (stem, k, ext)):
+                        k += 1
+                    dst = "%s.%d%s" % (stem, k, ext)
+                os.replace(src, dst)
+                _LOG.info("h3_suite: trashed %s", src)
