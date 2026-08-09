@@ -163,11 +163,15 @@ def _write_video(path, images, audio, fps, tags=None):
     arr = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
     n, height, width = arr.shape[0], arr.shape[1], arr.shape[2]
 
-    container = av.open(path, mode="w",
-                        options={"movflags": "+faststart"})
+    # use_metadata_tags is REQUIRED: without it the mov/mp4 muxer writes
+    # only its fixed standard tags (title, comment, ...) and SILENTLY
+    # drops custom keys like workflow/prompt, so the file looks fine and
+    # carries nothing. faststart keeps the moov atom at the front so the
+    # panel can start playing without seeking to the end.
+    container = av.open(
+        path, mode="w",
+        options={"movflags": "+faststart+use_metadata_tags"})
     if tags:
-        # container tags travel with the file; a copy dropped anywhere
-        # still says what made it
         for k, v in tags.items():
             try:
                 container.metadata[k] = v
@@ -331,13 +335,21 @@ class H3ProjectSave:
         }
         # the full graph goes in the container too when it is small enough
         # to be worth carrying; the sidecar always has it either way
-        if workflow is not None:
-            blob = json.dumps(workflow, separators=(",", ":"))
-            if len(blob) <= 512 * 1024:
-                tags["workflow"] = blob
+        embedded = []
+        for key, obj in (("workflow", workflow), ("prompt", prompt)):
+            if obj is None:
+                continue
+            blob = json.dumps(obj, separators=(",", ":"))
+            if len(blob) <= 2 * 1024 * 1024:
+                tags[key] = blob
+                embedded.append("%s %dKB" % (key, len(blob) // 1024))
             else:
-                _LOG.info("h3_suite: workflow is %d KB, kept in the sidecar "
-                          "only", len(blob) // 1024)
+                _LOG.warning(
+                    "h3_suite: %s is %d KB, too large to embed; it is in "
+                    "the sidecar json", key, len(blob) // 1024)
+        if embedded:
+            _LOG.info("h3_suite: embedding %s in %s.mp4",
+                      ", ".join(embedded), basename)
         _write_video(video_path, images, audio, fps, tags)
 
         p.record_render(index, take, meta)
