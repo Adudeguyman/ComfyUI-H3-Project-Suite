@@ -98,6 +98,34 @@ def suggest_branch_name(output_dir, source_name, at_index):
     return "%s_%03d" % (base, n)
 
 
+def suggest_snapshot_name(output_dir, source_name):
+    """First free name of the form <source>_backup, then _002..."""
+    base = "%s_backup" % validate_name(source_name)
+    root = projects_root(output_dir)
+    if not os.path.exists(os.path.join(root, base)):
+        return base
+    n = 2
+    while os.path.exists(os.path.join(root, "%s_%03d" % (base, n))):
+        n += 1
+    return "%s_%03d" % (base, n)
+
+
+def snapshot_project(output_dir, source_name, new_name=None):
+    """Copy a whole approved chain into a new project, untouched.
+
+    Used before a destructive reopen: the snapshot is a real project, so
+    the clips you are about to drop stay playable, exportable and
+    branchable rather than sitting in an archive folder nobody can use.
+    """
+    src = Project(output_dir, source_name)
+    approved = src.approved()
+    if not approved:
+        raise ProjectError("h3_suite: nothing approved to snapshot.")
+    name = new_name or suggest_snapshot_name(output_dir, source_name)
+    return branch_project(output_dir, source_name, approved[-1]["index"],
+                          name)
+
+
 def branch_project(output_dir, source_name, at_index, new_name,
                    at_take=None):
     """Fork a chain at an approved clip into a brand new project.

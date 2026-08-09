@@ -16,7 +16,8 @@ _TESTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_TESTS))
 
 from project import (Project, ProjectError, branch_project,  # noqa: E402
-                     list_projects, suggest_branch_name, validate_name)
+                     list_projects, snapshot_project, suggest_branch_name,
+                     suggest_snapshot_name, validate_name)
 
 
 def _fake_pair(proj, basename):
@@ -287,6 +288,34 @@ def main():
     assert rescue.chain_tail()["basename"] == "clip_002_take1"
     print("16. cleanup_takes trashed %d alternates, chain untouched, "
           "cleaned takes still branchable" % rep2["trash_takes"])
+
+    # un-approving with a safety net: snapshot the chain, then reopen
+    sh = Project(out, "Show", create=True)
+    for i in range(1, 6):
+        base = "clip_%03d_take1" % i
+        for ext in (".mp4", ".safetensors"):
+            with open(os.path.join(sh.clips_dir, base + ext), "wb") as fh:
+                fh.write(bytes([i]) * 128)
+        sh.record_render(i, 1, {"duration": 5.0})
+        sh.approve()
+    assert suggest_snapshot_name(out, "Show") == "Show_backup"
+    assert sh.cascade_of(3) == ["clip_004_take1", "clip_005_take1"]
+    snap = snapshot_project(out, "Show")
+    assert snap.name == "Show_backup" and len(snap.approved()) == 5
+    sh2 = Project(out, "Show")
+    dropped = sh2.reopen(3)
+    assert dropped == ["clip_004_take1", "clip_005_take1"]
+    assert len(sh2.clips) == 3 and sh2.pending()["index"] == 3
+    # the snapshot kept everything the reopen threw away
+    for name in ("clip_004_take1", "clip_005_take1"):
+        assert os.path.isfile(os.path.join(snap.clips_dir, name + ".mp4"))
+    with open(os.path.join(snap.clips_dir, "clip_005_take1.mp4"),
+              "rb") as fh:
+        assert fh.read() == bytes([5]) * 128
+    assert snap.next_save() == (6, 1, "clip_006_take1")
+    assert suggest_snapshot_name(out, "Show") == "Show_backup_002"
+    print("17. snapshot before reopen: backup keeps all 5 clips and still "
+          "chains, original cut to 3 with clip 3 pending")
 
     print("all checks passed")
 

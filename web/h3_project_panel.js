@@ -259,11 +259,10 @@ class ChainTimeline {
       el("div", { class: "h3p-tbar" }, this.playBtn, this.timeEl,
          this.scrub));
     this.confirmMsg = el("div", { class: "msg" });
-    this.confirmYes = el("button", { class: "h3p-btn warn", text: "Confirm" });
+    this.confirmBtns = el("div", { style: "display:flex;gap:8px;" +
+                                          "flex-wrap:wrap" });
     this.confirm = el("div", { class: "h3p-confirm" }, this.confirmMsg,
-      el("div", { style: "display:flex;gap:8px" }, this.confirmYes,
-        el("button", { class: "h3p-btn", text: "Cancel",
-                       onclick: () => this.hideConfirm() })));
+                      this.confirmBtns);
 
     this.playerEmpty = el("div", { class: "h3p-playerempty" });
     this.player = el("div", { class: "h3p-player" }, this.playerEmpty);
@@ -820,8 +819,23 @@ class ProjectModal extends ChainTimeline {
   }
 
   showConfirm(msg, onYes) {
+    this.showChoices(msg, [{ label: "Confirm", cls: "warn", pick: onYes }]);
+  }
+
+  showChoices(msg, choices) {
     this.confirmMsg.textContent = msg;
-    this.confirmYes.onclick = () => { this.hideConfirm(); onYes(); };
+    this.confirmBtns.innerHTML = "";
+    for (const c of choices) {
+      this.confirmBtns.append(el("button", {
+        class: "h3p-btn " + (c.cls || ""),
+        text: c.label,
+        title: c.title || "",
+        onclick: () => { this.hideConfirm(); c.pick(); },
+      }));
+    }
+    this.confirmBtns.append(el("button", {
+      class: "h3p-btn", text: "Cancel",
+      onclick: () => this.hideConfirm() }));
     this.confirm.classList.add("on");
   }
 
@@ -880,20 +894,59 @@ class ProjectModal extends ChainTimeline {
     post("/h3_suite/project/reopen", { name: this.name(), index })
       .then((probe) => {
         const drop = probe.would_drop || [];
-        const msg = drop.length
-          ? `Reopen clip ${index}? Everything after it was conditioned ` +
-            `on it and will be dropped to .trash/:\n\n${drop.join("\n")}`
-          : `Reopen clip ${index}? The next queue press re-renders it ` +
-            `as a new take.`;
-        this.showConfirm(msg, async () => {
+        const run = async (snapshot) => {
           try {
-            await post("/h3_suite/project/reopen",
-                       { name: this.name(), index, confirm: true });
-            toast(`clip ${index} reopened`);
+            const out = await post("/h3_suite/project/reopen", {
+              name: this.name(), index, confirm: true,
+              snapshot: !!snapshot,
+              snapshot_name: probe.snapshot_name,
+            });
+            toast(out.snapshot
+              ? `clip ${index} reopened \u2014 backup saved as ` +
+                `"${out.snapshot}"`
+              : `clip ${index} reopened`);
             this.viewing = null;
+            this._sig = null;
+            this.durations = {};
+            await this.loadProjects();
             this.refresh(true);
           } catch (e) { toast(e.message, true); }
-        });
+        };
+
+        if (!drop.length) {
+          // nothing downstream to lose; this is just an un-approve
+          this.showConfirm(
+            `Reopen clip ${index}? It goes back to pending, and the next ` +
+            `queue press re-renders it as a new take.`,
+            () => run(false));
+          return;
+        }
+
+        const n = drop.length;
+        const msg =
+          `Reopen clip ${index}?\n\n` +
+          `${n} later clip${n === 1 ? "" : "s"} ` +
+          `${n === 1 ? "was" : "were"} built on it and can no longer ` +
+          `follow on:\n\n${drop.map((d) => "  " + d).join("\n")}\n\n` +
+          `Pick what happens to ${n === 1 ? "it" : "them"}:`;
+        const choices = [
+          { label: "Back them up first", cls: "ok",
+            title: "copy the whole chain into a separate project, then " +
+                   "reopen here",
+            pick: () => run(true) },
+          { label: "Discard them", cls: "bad",
+            title: "move them to .trash/ - recoverable until you purge",
+            pick: () => run(false) },
+        ];
+        if (index > 1) {
+          choices.push({
+            label: `Branch from clip ${index - 1} instead`,
+            title: "leave this project untouched and redo clip " +
+                   index + " in a new one",
+            pick: () => this.branchFrom(index - 1),
+          });
+        }
+        this.showChoices(msg, choices);
       })
       .catch((e) => toast(e.message, true));
   }

@@ -100,15 +100,29 @@ def _register():
     @routes.post("/h3_suite/project/reopen")
     @_json_post
     def reopen(body):
+        from .project import snapshot_project, suggest_snapshot_name
         import folder_paths as fp
-        p = Project(fp.get_output_directory(), body.get("name"))
+        out_dir = fp.get_output_directory()
+        p = Project(out_dir, body.get("name"))
         index = int(body.get("index", 0))
         if not body.get("confirm"):
-            # first call: report the blast radius, change nothing
-            return {"would_drop": p.cascade_of(index)}
+            # first call: report the blast radius and what a backup would
+            # be called, change nothing
+            return {"would_drop": p.cascade_of(index),
+                    "snapshot_name": suggest_snapshot_name(
+                        out_dir, p.name)}
+        snapshot = None
+        if body.get("snapshot"):
+            # snapshot BEFORE reopening, so a failure here leaves the
+            # chain intact rather than half-dismantled
+            snap = snapshot_project(out_dir, p.name,
+                                    body.get("snapshot_name") or None)
+            snapshot = snap.name
+            p = Project(out_dir, body.get("name"))   # re-read after copy
         dropped = p.reopen(index)
         out = _state(p)
         out["dropped"] = dropped
+        out["snapshot"] = snapshot
         return out
 
     @routes.get("/h3_suite/project/storage")
