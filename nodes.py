@@ -614,6 +614,28 @@ def _resolve_latent_path(path, clip_index=0):
                         "h3_suite: no saved latents in %s. Run a "
                         "clip with the Save Latent node first." % c)
             return max(files, key=os.path.getmtime)
+
+    # The Save node's field is a filename PREFIX ("folder/name" writes
+    # name_00002.safetensors), while this one documents a FOLDER. Typing the
+    # same string into both is the obvious thing to do and used to fail with
+    # "neither a file nor a folder" AFTER a successful save -- the worst
+    # possible moment. So accept a prefix here too: treat the last component
+    # as a filename stem and match inside its parent.
+    for c in candidates:
+        parent, stem = os.path.split(c)
+        if not stem or not os.path.isdir(parent):
+            continue
+        idx = int(clip_index)
+        if idx > 0:
+            endings = ("_%05d.safetensors" % idx,
+                       "_clip%03d.safetensors" % idx)
+        else:
+            endings = (".safetensors",)
+        files = [os.path.join(parent, f) for f in os.listdir(parent)
+                 if f.startswith(stem) and f.endswith(endings)
+                 and not f.endswith("_%05d_.safetensors" % idx)]
+        if files:
+            return max(files, key=os.path.getmtime)
     raise FileNotFoundError(
         "h3_suite: %r is neither a file nor a folder (also tried "
         "relative to the ComfyUI output directory)." % p)
@@ -718,7 +740,8 @@ class H3ContextLoadLatent:
             "required": {
                 "latent_path": ("STRING", {
                     "default": "h3_context",
-                    "tooltip": "A saved latent file, or a folder (relative "
+                    "tooltip": "A file, a folder, or the same filename "
+                               "prefix you gave the Save node (relative "
                                "paths resolve against the ComfyUI output "
                                "directory). Pointing at a specific FILE "
                                "always loads that file, ignoring "
