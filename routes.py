@@ -119,6 +119,45 @@ def _register():
         p.purge_trash()
         return _state(p)
 
+    @routes.post("/h3_suite/project/export")
+    @_json_post
+    def export(body):
+        import shutil
+        import subprocess
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        clips = p.approved()
+        if not clips:
+            raise ProjectError("h3_suite: nothing approved to export.")
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise ProjectError("h3_suite: ffmpeg not found on PATH; "
+                               "install it to export a master.")
+        missing = [c["basename"] for c in clips
+                   if not os.path.isfile(p.clip_video_path(c["basename"]))]
+        if missing:
+            raise ProjectError("h3_suite: approved clip videos missing: %s"
+                               % ", ".join(missing))
+        list_path = os.path.join(p.root, ".concat.txt")
+        with open(list_path, "w", encoding="utf-8") as fh:
+            for c in clips:
+                fh.write("file '%s'\n"
+                         % p.clip_video_path(c["basename"]).replace("'",
+                                                                    "'\\''"))
+        master = os.path.join(p.root, "%s_master.mp4" % p.name)
+        # identical-format clips by construction: stream copy, no re-encode
+        proc = subprocess.run(
+            [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+             "-c", "copy", master],
+            capture_output=True, text=True)
+        os.unlink(list_path)
+        if proc.returncode != 0:
+            raise ProjectError("h3_suite: ffmpeg concat failed: %s"
+                               % proc.stderr[-400:])
+        out = _state(p)
+        out["master"] = master
+        return out
+
     @routes.get("/h3_suite/project/video")
     async def video(request):
         try:
