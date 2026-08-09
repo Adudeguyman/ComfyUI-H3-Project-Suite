@@ -392,6 +392,7 @@ class ChainTimeline {
       }
       this.curSeg = i;
       this.paintSegments();
+      this.syncBranchButton?.();
       this.preload(i + 1);
     }
     try { this.video.currentTime = local; } catch (e) { /* seeking */ }
@@ -427,6 +428,36 @@ class ChainTimeline {
     }
   }
 
+  syncBranchButton() {
+    const b = this.branchBtn;
+    if (!b) return;
+    const seg = this.timeline?.[this.curSeg];
+    const clip = seg?.clip;
+    const key = clip ? `${clip.index}:${clip.status}` : "none";
+    if (key === this._branchBtnIndex) return;   // nothing changed
+    this._branchBtnIndex = key;
+    if (!clip) {
+      b.style.display = "none";
+      return;
+    }
+    b.style.display = "";
+    if (clip.status === "approved") {
+      b.disabled = false;
+      b.textContent = `Branch from clip ${clip.index}\u2026`;
+      b.title = "copy clips 1.." + clip.index + " into a new project and " +
+                "iterate there, leaving this one intact";
+      b.onclick = () => this.branchFrom(clip.index);
+    } else {
+      // branching needs a settled tail; a pending clip has none yet
+      b.disabled = true;
+      b.textContent = `Branch from clip ${clip.index}\u2026`;
+      b.title = `Clip ${clip.index} is still pending. Approve or reject ` +
+                `it first, or scrub back to an approved clip to branch ` +
+                `from there.`;
+      b.onclick = null;
+    }
+  }
+
   paintPlayhead() {
     if (!this.fill || !this.timeEl) return;
     const now = this.globalNow();
@@ -442,6 +473,7 @@ class ChainTimeline {
       `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}` +
       (seg ? ` \u00b7 clip ${seg.clip.index}` : "");
     this.playBtn.textContent = this.video.paused ? "\u25b6" : "\u2758\u2758";
+    this.syncBranchButton?.();
   }
 
   startTicker() {
@@ -468,6 +500,8 @@ class ChainTimeline {
 // review modal's timeline is left alone.
 
 class BranchModal extends ChainTimeline {
+  syncBranchButton() { /* the branch modal has no branch button */ }
+
   constructor(project, index, onDone) {
     super();
     injectCSS();
@@ -1090,16 +1124,15 @@ class ProjectModal extends ChainTimeline {
                          text: `Reopen clip ${tail.index}\u2026`,
                          onclick: () => this.reopen(tail.index) }));
       }
-      const at = (shownSeg && shownSeg.clip.status === "approved")
-        ? shownSeg.clip : tail;
-      if (at) {
-        this.actions.append(
-          el("button", { class: "h3p-btn",
-                         text: `Branch from clip ${at.index}\u2026`,
-                         title: "copy clips 1..N into a new project and " +
-                                "iterate there, leaving this one intact",
-                         onclick: () => this.branchFrom(at.index) }));
-      }
+      // the branch target follows the PLAYHEAD, not whatever segment
+      // happened to be current when this row was built. paintPlayhead
+      // keeps its label and handler in sync as you scrub.
+      this.branchBtn = el("button", { class: "h3p-btn", text: "Branch\u2026",
+        title: "copy clips 1..N into a new project and iterate there, " +
+               "leaving this one intact" });
+      this.actions.append(this.branchBtn);
+      this._branchBtnIndex = null;
+      this.syncBranchButton();
       this.paintRail(s, name, approved, tail, null);
       this.paintFoot(approved, tail, name);
       return;
