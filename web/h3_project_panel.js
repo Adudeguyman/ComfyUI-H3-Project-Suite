@@ -489,6 +489,13 @@ class ProjectModal {
     // cache duration per basename; resolve as metadata arrives
     this.durations = this.durations || {};
     const name = this.name();
+    // clips saved with metadata carry their duration in the manifest, so
+    // the timeline builds instantly; only older clips need probing
+    for (const c of clips) {
+      if (!(c.basename in this.durations) && c.meta?.duration > 0) {
+        this.durations[c.basename] = c.meta.duration;
+      }
+    }
     const need = clips.filter((c) => !(c.basename in this.durations));
     if (!need.length) return Promise.resolve();
     return Promise.all(need.map((c) => new Promise((res) => {
@@ -792,8 +799,13 @@ class ProjectModal {
         ? `Pending review \u2014 clip ${shown.index} take ${shown.take}`
         : `Clip ${shown.index} take ${shown.take}`;
       this.viewTitle.className = "h3p-viewtitle " + shown.status;
-      this.viewSub.textContent = shown.from
-        ? `continues ${shown.from}` : "clip 1 \u2014 fresh start";
+      const m = shown.meta;
+      const facts = m
+        ? ` \u00b7 ${m.width}\u00d7${m.height} \u00b7 ${m.frames}f ` +
+          `\u00b7 ${m.duration}s`
+        : "";
+      this.viewSub.textContent = (shown.from
+        ? `continues ${shown.from}` : "clip 1 \u2014 fresh start") + facts;
       const url = videoURL(name, shown.basename);
       if (!this.video.src.includes(encodeURIComponent(shown.basename))) {
         this.video.src = url;

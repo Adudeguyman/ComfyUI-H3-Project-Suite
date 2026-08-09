@@ -50,6 +50,7 @@ _BASENAME_RE = re.compile(r"^clip_(\d{3})_take(\d+)$")
 
 VIDEO_EXT = ".mp4"
 LATENT_EXT = ".safetensors"
+SIDECAR_EXT = ".json"
 
 
 class ProjectError(RuntimeError):
@@ -189,14 +190,15 @@ class Project:
 
     def _paths(self, basename):
         return (os.path.join(self.clips_dir, basename + VIDEO_EXT),
-                os.path.join(self.clips_dir, basename + LATENT_EXT))
+                os.path.join(self.clips_dir, basename + LATENT_EXT),
+                os.path.join(self.clips_dir, basename + SIDECAR_EXT))
 
     def tail_latent_path(self):
         """The latent to condition the next clip on, existence-checked."""
         tail = self.chain_tail()
         if tail is None:
             return None
-        video, lat = self._paths(tail["basename"])
+        video, lat, _side = self._paths(tail["basename"])
         if not os.path.isfile(lat):
             raise ProjectError(
                 "h3_suite: approved clip %d's latent is missing (%s). The "
@@ -205,8 +207,10 @@ class Project:
         return lat
 
     def clip_video_path(self, basename):
-        video, _ = self._paths(basename)
-        return video
+        return self._paths(basename)[0]
+
+    def clip_sidecar_path(self, basename):
+        return self._paths(basename)[2]
 
     def next_save(self):
         """(index, take, basename) the next render should write.
@@ -223,12 +227,17 @@ class Project:
 
     # -- transitions -------------------------------------------------------
 
-    def record_render(self, index, take):
+    def record_render(self, index, take, meta=None):
         """A render finished and its pair is on disk: make it the pending
         clip. A previous pending take of the same index is superseded and
-        its pair is trashed (the take number preserves it in .trash/)."""
+        its pair is trashed (the take number preserves it in .trash/).
+
+        `meta` is a small dict of render facts (dimensions, frame count,
+        duration, seed) stored in the manifest so the panel and any later
+        reuse can read them without probing the files.
+        """
         basename = "clip_%03d_take%d" % (index, take)
-        video, lat = self._paths(basename)
+        video, lat, _side = self._paths(basename)
         for p in (video, lat):
             if not os.path.isfile(p):
                 raise ProjectError(
@@ -250,11 +259,14 @@ class Project:
                 "the next index must be %d."
                 % (index, len(self.clips), len(self.clips) + 1))
         tail = self.chain_tail()
-        self.clips.append({
+        entry = {
             "index": index, "take": take, "status": "pending",
             "basename": basename,
             "from": tail["basename"] if tail else None,
-        })
+        }
+        if meta:
+            entry["meta"] = dict(meta)
+        self.clips.append(entry)
         self._write()
         return basename
 

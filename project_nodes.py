@@ -16,8 +16,11 @@ re-roll / reject live on the manifest via the HTTP routes; the next queue
 press re-resolves because IS_CHANGED hashes the manifest.
 """
 
+import datetime
+import json
 import logging
 import os
+import tempfile
 
 import folder_paths
 
@@ -37,6 +40,23 @@ except ImportError:
 _LOG = logging.getLogger("h3_suite")
 
 FPS_DEFAULT = 24
+
+
+def _now_iso():
+    return datetime.datetime.now().replace(microsecond=0).isoformat()
+
+
+def _atomic_json(path, data):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".side_",
+                               suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def _placeholder_latent():
@@ -127,7 +147,7 @@ class H3ProjectHub:
         return (handle, context, active, status)
 
 
-def _write_video(path, images, audio, fps):
+def _write_video(path, images, audio, fps, tags=None):
     """Encode post-Trim frames + audio to h264/aac mp4 via PyAV.
 
     images: [N,H,W,C] float 0..1. audio: ComfyUI AUDIO dict or None.
@@ -145,6 +165,14 @@ def _write_video(path, images, audio, fps):
 
     container = av.open(path, mode="w",
                         options={"movflags": "+faststart"})
+    if tags:
+        # container tags travel with the file; a copy dropped anywhere
+        # still says what made it
+        for k, v in tags.items():
+            try:
+                container.metadata[k] = v
+            except Exception:
+                pass
     try:
         vs = container.add_stream("libx264", rate=int(fps))
         vs.width, vs.height = width, height
@@ -215,6 +243,10 @@ class H3ProjectSave:
                                "clip without sound cannot be judged at "
                                "review."}),
             },
+            # ComfyUI hands these over for free; they are what makes a clip
+            # reusable later instead of just watchable
+            "hidden": {"prompt": "PROMPT",
+                       "extra_pnginfo": "EXTRA_PNGINFO"},
         }
 
     RETURN_TYPES = ("STRING",)
@@ -228,7 +260,8 @@ class H3ProjectSave:
                    "bookkeeping all come from the manifest - nothing to "
                    "type, nothing to advance.")
 
-    def save(self, project, latent, images, fps, audio=None):
+    def save(self, project, latent, images, fps, audio=None, prompt=None,
+             extra_pnginfo=None):
         if _st_save is None:
             raise RuntimeError("h3_suite: safetensors unavailable")
         p = Project(project["output_dir"], project["name"])
@@ -252,11 +285,62 @@ class H3ProjectSave:
         # latent first: it is the unreconstructable half. If the video
         # encode then fails, record_render never runs, the manifest never
         # sees the clip, and the stray files are overwritten by the retry.
-        _st_save({"video": video_lat, "audio": audio_lat}, latent_path,
-                 metadata={"format": "h3_motion_context_av_v1"})
-        _write_video(video_path, images, audio, fps)
+        # facts worth having without opening anything
+        frames = int(images.shape[0])
+        meta = {
+            "width": int(images.shape[2]),
+            "height": int(images.shape[1]),
+            "frames": frames,
+            "fps": int(fps),
+            "duration": round(frames / float(fps), 4),
+            "latent_video": list(video_lat.shape),
+            "latent_audio": list(audio_lat.shape),
+            "saved_at": _now_iso(),
+        }
+        if audio is not None:
+            meta["sample_rate"] = int(audio["sample_rate"])
 
-        p.record_render(index, take)
+        workflow = None
+        if isinstance(extra_pnginfo, dict):
+            workflow = extra_pnginfo.get("workflow")
+
+        # safetensors metadata must be flat str->str
+        st_meta = {"format": "h3_motion_context_av_v1",
+                   "h3_project": p.name,
+                   "h3_clip": basename,
+                   "h3_meta": json.dumps(meta, separators=(",", ":"))}
+        _st_save({"video": video_lat, "audio": audio_lat}, latent_path,
+                 metadata=st_meta)
+
+        # sidecar: the authoritative record, plain JSON next to the pair
+        sidecar = {
+            "project": p.name, "clip": basename,
+            "index": index, "take": take,
+            "meta": meta,
+            "prompt": prompt,
+            "workflow": workflow,
+        }
+        side_path = os.path.join(p.clips_dir, basename + ".json")
+        _atomic_json(side_path, sidecar)
+
+        tags = {
+            "title": "%s %s" % (p.name, basename),
+            "comment": json.dumps({"project": p.name, "clip": basename,
+                                   "meta": meta},
+                                  separators=(",", ":")),
+        }
+        # the full graph goes in the container too when it is small enough
+        # to be worth carrying; the sidecar always has it either way
+        if workflow is not None:
+            blob = json.dumps(workflow, separators=(",", ":"))
+            if len(blob) <= 512 * 1024:
+                tags["workflow"] = blob
+            else:
+                _LOG.info("h3_suite: workflow is %d KB, kept in the sidecar "
+                          "only", len(blob) // 1024)
+        _write_video(video_path, images, audio, fps, tags)
+
+        p.record_render(index, take, meta)
         _LOG.info("h3_suite: project %r recorded %s (pending review)",
                   p.name, basename)
         return (basename,)

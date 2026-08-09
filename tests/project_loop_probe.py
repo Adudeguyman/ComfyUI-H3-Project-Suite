@@ -119,12 +119,23 @@ def main():
     # stub the encoder: PyAV needs real codecs; record what would be written
     encoded = []
 
-    def fake_write(path, images, audio, fps):
+    def fake_write(path, images, audio, fps, tags=None):
         encoded.append((path, int(images.shape[0]),
                         None if audio is None else int(
-                            audio["waveform"].shape[-1]), fps))
+                            audio["waveform"].shape[-1]), fps, tags))
         open(path, "w").write("mp4:%d" % images.shape[0])
     pn._write_video = fake_write
+
+    # capture what safetensors metadata the saver asks for
+    st_meta_seen = {}
+    _orig_save = stt.save_file
+
+    def save_file_meta(dd, path, metadata=None):
+        st_meta_seen.clear()
+        st_meta_seen.update(metadata or {})
+        return _orig_save(dd, path, metadata)
+    stt.save_file = save_file_meta
+    pn._st_save = save_file_meta
 
     hub = pn.H3ProjectHub()
     saver = pn.H3ProjectSave()
@@ -158,7 +169,10 @@ def main():
     images = T(np.zeros((frames - 22, 480, 864, 3), dtype=np.float32))
     audio = {"waveform": T(np.zeros((1, 2, 32000 * 4), dtype=np.float32)),
              "sample_rate": 32000}
-    (base1,) = saver.save(handle, fresh_latent(1.0), images, 24, audio)
+    fake_prompt = {"7": {"class_type": "KSampler", "inputs": {"seed": 42}}}
+    fake_extra = {"workflow": {"nodes": [{"id": 7, "type": "KSampler"}]}}
+    (base1,) = saver.save(handle, fresh_latent(1.0), images, 24, audio,
+                          prompt=fake_prompt, extra_pnginfo=fake_extra)
     assert base1 == "clip_001_take1"
     cdir = os.path.join(out, "h3_projects", "LoopTest", "clips")
     assert os.path.isfile(os.path.join(cdir, "clip_001_take1.mp4"))
@@ -166,6 +180,30 @@ def main():
     assert encoded[-1][1] == frames - 22
     print("3. Project Save wrote the pair as clip_001_take1, "
           "manifest pending")
+
+    # ---- 3b: metadata written three ways ----
+    import json as _json
+    side = os.path.join(cdir, "clip_001_take1.json")
+    assert os.path.isfile(side), "sidecar missing"
+    sc = _json.load(open(side))
+    assert sc["clip"] == "clip_001_take1" and sc["index"] == 1
+    assert sc["prompt"] == fake_prompt, "prompt not captured"
+    assert sc["workflow"] == fake_extra["workflow"], "workflow not captured"
+    assert sc["meta"]["frames"] == frames - 22
+    assert sc["meta"]["fps"] == 24
+    assert abs(sc["meta"]["duration"] - (frames - 22) / 24.0) < 1e-4
+    assert st_meta_seen["format"] == "h3_motion_context_av_v1"
+    assert st_meta_seen["h3_clip"] == "clip_001_take1"
+    assert _json.loads(st_meta_seen["h3_meta"])["frames"] == frames - 22
+    tags = encoded[-1][4]
+    assert tags and "LoopTest" in tags["title"]
+    assert _json.loads(tags["comment"])["clip"] == "clip_001_take1"
+    assert _json.loads(tags["workflow"]) == fake_extra["workflow"]
+    mf = _json.load(open(os.path.join(out, "h3_projects", "LoopTest",
+                                      "project.json")))
+    assert mf["clips"][0]["meta"]["duration"] == sc["meta"]["duration"]
+    print("3b. sidecar json, safetensors metadata, mp4 tags and manifest "
+          "meta all carry prompt/workflow/dimensions")
 
     # still inactive: pending does not arm the chain, but token moved
     handle, context, active, status = hub.resolve("LoopTest", True)
