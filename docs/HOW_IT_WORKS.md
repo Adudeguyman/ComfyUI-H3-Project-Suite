@@ -16,9 +16,11 @@ speed, and the same audio - not similar audio, the *same waveform*,
 continued. Repeat down a chain as long as you like.
 
 This is done entirely with runtime patches. No ComfyUI files are edited on
-disk. Drop the folder in, restart, and if a future ComfyUI update changes
-something underneath, the patches detect it at startup and refuse to run
-rather than quietly rendering something wrong.
+disk. The patches are opt-in: importing the pack changes nothing, and they
+arm the first time an H3 Context node actually runs. A stock H3 workflow in
+the same session keeps stock behaviour. If a future ComfyUI update changes
+something underneath, the self-tests catch it at that moment and refuse to
+run rather than quietly rendering something wrong.
 
 ## How is this different from LTX motion context?
 
@@ -30,7 +32,7 @@ sampling step. The only thing preventing a *run* of consecutive frames was
 a single check in ComfyUI that rejected any keyframe that wasn't the first
 or last frame. Mathematically, the position formula already worked for every
 frame in between. This project lifts that restriction (and verifies its own
-math against ComfyUI's at every startup).
+math against ComfyUI's every time it arms).
 
 The bigger difference is audio. H3 generates picture and sound together,
 and this carries **both** streams across the join. Getting audio to
@@ -40,18 +42,26 @@ repo (see "The audio story" below).
 
 ## Install
 
-Drop the folder into `ComfyUI/custom_nodes/` and restart. Watch the console
-for:
+Drop the folder into `ComfyUI/custom_nodes/` and restart. These lines appear
+on your first chained render, not at startup - the patches arm when the
+first H3 Context node executes:
 
 ```
-h3_motion_context: interior keyframe anchors enabled
-h3_motion_context: keyframe/ref coexistence enabled
+h3_suite: interior keyframe anchors enabled
+h3_suite: keyframe/ref coexistence enabled
 ```
 
 If a self-test fails instead, the reason is logged and the nodes refuse to
 run. That's deliberate: a loud failure beats a subtly wrong render.
 
-## Wiring
+## Wiring the manual layer
+
+*You almost certainly want the project layer instead: H3 Project Hub and
+H3 Project Save do all of the bookkeeping below automatically, including
+the clip indices, the save paths and the clip-1 special case. See the
+[README](../README.md) for that. This section documents the underlying
+nodes, which remain available for hand-built experiments and read the same
+files the project layer writes.*
 
 ```
 MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo (or the t2v path)
@@ -148,6 +158,42 @@ The Trim node also has `match_tail` (default on). Leave it on: H3 rounds
 its audio grid up, so every clip carries ~8 ms more sound than picture, and
 without the trim that error grows at every join in a chain.
 
+## The video story: skipping the round trip
+
+Audio was the hard part, but video had a quieter problem. The original
+approach hands the previous clip's *decoded frames* to the next render,
+which the VAE then re-encodes to pin them. Encode-decode-encode is not
+lossless, so what gets pinned is subtly not what the previous clip
+actually produced - and the model continues from the drifted version.
+Colours shift a little at every link, and the error compounds down a
+chain.
+
+The fix is that the drift is avoidable entirely, because the saved AV
+latent already contains the video stream. `video_source: latent` slices
+the pinned run straight out of it: no decode, no re-encode, no VAE call
+at all on the video path. What the next clip continues from is bit-exact
+what the previous one generated.
+
+The fiddly part is grid phase. Latent steps cover `(1, 4, 4, 4, 4)` pixel
+frames cycling by absolute step index, and `VIDEO_RUN_GRID` (39, 22, 5, 1)
+holds only for a run starting at step 0 of a fresh encode. A tail slice
+out of a 107-step clip starts at whatever phase step `107 - n` happens to
+be, so the slice has to begin on a phase-0 boundary - step index divisible
+by 5 - for its internal coverage pattern to match a fresh encode's and for
+`_step_offsets` to apply unchanged. H3 clip lengths are congruent 5 mod 17
+by construction, which forces the saved step count to `2 mod 5`, which
+makes the phase-aligned tail runs come out to exactly 5, 22 or 39 pixel
+frames: the familiar grid minus the one-frame run. The default context
+length of 22 lands on it without any adjustment.
+
+Two consequences worth knowing. Latents cannot be resized, so a chain on
+this path is locked to the resolution of its first clip and a mismatch is
+a hard error rather than a silent stretch. And the sliced steps carry the
+causal VAE's temporal context from earlier in the clip, which a fresh
+encode of the same frames would not - whether the model treats them
+identically as cond rows is an empirical question, and the answer in
+practice has been yes.
+
 ## The audio story
 
 The first version put pinned audio through H3's reference mechanism, which
@@ -212,12 +258,12 @@ a seam and the ear is least forgiving about artifacts).
 
 **One machine, one configuration.** Everything here was verified on a
 single Windows machine at one resolution with one sampler. The math is
-self-tested at every startup; the perceptual results are one person's
+self-tested every time they arm; the perceptual results are one person's
 renders.
 
 **ComfyUI's H3 support is young and moving.** The patches depend on the
 current shape of ComfyUI's H3 code. They verify those assumptions at
-startup and shut down loudly if anything changed, so the failure mode is
+arming and shut down loudly if anything changed, so the failure mode is
 "the node refuses to run after an update," not corrupted output.
 
 **Turn Spectrum off.** Step-skipping optimizers like
@@ -240,7 +286,7 @@ sound with `match_tail` on, Spectrum off. That is the configuration every
 
 Built and verified against ComfyUI master as of early August 2026, while
 H3 support was days old. The math patches self-test against the live
-ComfyUI code at every startup, so an upstream change surfaces as a clear
+ComfyUI code every time they arm, so an upstream change surfaces as a clear
 refusal, not a bad render. The repo also ships two standalone test
 scripts that run without ComfyUI or a GPU (only numpy needed):
 
@@ -255,11 +301,15 @@ Both should print their checks and finish with a pass line.
 
 | File | Role |
 |---|---|
-| `patch_layout.py` | Lifts the first/last-only keyframe restriction; moves pinned audio onto the clip timeline, including after existing R2V refs; keeps everything aligned when references shift the layout. Self-tests at startup. |
+| `patch_layout.py` | Lifts the first/last-only keyframe restriction; moves pinned audio onto the clip timeline, including after existing R2V refs; keeps everything aligned when references shift the layout. Self-tests when it arms. |
 | `patch_payload.py` | Lets pinned video and pinned audio coexist (stock code let one overwrite the other). |
-| `nodes.py` | The four nodes: Motion Context, Trim, and the latent Save/Load pair. |
+| `nodes.py` | The chain nodes: H3 Context, Trim, and the low-level latent Save/Load pair. |
+| `project.py` | The project model: manifest schema, chain transitions, take retention, branching, storage accounting. No ComfyUI dependency. |
+| `project_nodes.py` | H3 Project Hub and H3 Project Save - the graph's front and back ends. |
+| `routes.py` | The `/h3_suite/` HTTP endpoints the review panel talks to. |
+| `web/h3_project_panel.js` | The review panel and branch modal. |
 | `tests/seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
-| `tests/` | Standalone tests for the patches and the node; run without ComfyUI (numpy only). |
+| `tests/` | Standalone tests; run without ComfyUI (numpy only, except the mp4 probe which needs PyAV and skips if absent). |
 
 The `example_workflows/` folder contains both the original compact FL2VA demo
 and seitanism's six-clip Ref2VA/global-reference chain. See its README for the
