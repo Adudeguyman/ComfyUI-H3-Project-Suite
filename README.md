@@ -1,4 +1,13 @@
-# H3 Motion Context
+# H3 Project Suite
+
+*A fork of [NikoDemon80/ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context)
+incorporating the Ref2VA multi-reference fix from
+[ethanfel's fork](https://github.com/ethanfel/ComfyUI-H3-Motion-Context)
+(contributed by seitanism), and extending toward project-based clip chaining.
+Node classes are renamed (`H3Context*`), so this pack and the Motion Context
+originals cannot be installed side by side - they hook the same ComfyUI
+internals and the layout self-test will refuse to arm.*
+
 
 Chain MiniMax H3 clips together so that motion **and sound** continue across
 the joins, instead of every clip re-deciding what's happening from a single
@@ -49,11 +58,11 @@ run. That's deliberate: a loud failure beats a subtly wrong render.
 
 ```
 MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo (or the t2v path)
-  -> H3 Motion Context      <- previous clip's frames + audio
+  -> H3 Context      <- previous clip's frames + audio
   -> guider / sampler
   ...
   decoded IMAGE + AUDIO
-  -> H3 Motion Context Trim         <- wire trim_frames across
+  -> H3 Context Trim         <- wire trim_frames across
   -> Create Video / save
 ```
 
@@ -65,8 +74,8 @@ the previous *run*, not the current one. Two helper nodes carry it across
 runs the same way you already carry frames and audio through saved files:
 
 ```
-this run:   SamplerCustomAdvanced -> H3 Motion Context Save Latent
-next run:   H3 Motion Context Load Latent -> context_latent
+this run:   SamplerCustomAdvanced -> H3 Context Save Latent
+next run:   H3 Context Load Latent -> context_latent
 ```
 
 Both nodes have a `clip_index`, and the numbers mean exactly what they

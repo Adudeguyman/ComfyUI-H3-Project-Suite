@@ -1,4 +1,4 @@
-"""H3 Motion Context.
+"""H3 Project Suite.
 
 Clip chaining for MiniMax H3: pin the tail of the previous clip (picture
 and sound) so the next clip genuinely continues it.

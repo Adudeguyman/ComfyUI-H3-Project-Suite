@@ -25,7 +25,7 @@
         "Workflow credit": "seitanism — Banodoco MiniMax H3 seamless-extension thread"
       },
       "widgets_values": [
-        "H3 SEAMLESS CHAIN — GLOBAL REFS + MOTION CONTEXT 39/39\n\nACTIVE BY DEFAULT\n• Clip 1 = Ref2VA start using GLOBAL CHARACTER REFS\n• Clip 2 = Ref2VA + Motion Context continuation\n\nOPTIONAL\n• Clip 3 and Clips 4–6 are present but bypassed.\n• Use the Fast Groups Bypasser panel to activate them SEQUENTIALLY:\n  Clip 3 → Clip 4 → Clip 5 → Clip 6.\n• Do not activate Clip 5 unless Clip 4 is active, etc.\n\nGLOBAL CHARACTER REFS\n• Select two images in the purple GLOBAL CHARACTER REFS group before queueing.\n• Ref 1 = face / identity.\n• Ref 2 = full body / wardrobe of the SAME character.\n• Both references are wired into every clip as <Picture 1> and <Picture 2>.\n\nMODELS / COMPATIBILITY\n• Video model = minimax_h3_ref2va_pruned_int8_convrot.safetensors\n• Text encoder = qwen3vl_32b_minimax_h3_int8_convrot.safetensors\n• Requires this H3 Motion Context node pack; multi-ref timeline-audio compatibility is built in.\n• Compatibility fix and workflow by seitanism in the Banodoco MiniMax H3 thread.\n• Do not run the separately posted V2 patch script with this version.\n\nPREVIEWS\n• Each clip uses VHS Video Combine with save_output = false.\n• VHS writes preview media only to ComfyUI's temp directory, not output.\n• H.264 is used because browser preview is more reliable than H.265.\n\nNO PNG GALLERIES\n• No SaveImage nodes are used.\n• The chain uses raw IMAGE/AUDIO tensors directly, so PNG files are unnecessary.\n\nFINAL\n• The final VHS node concatenates decoded image/audio tensors first,\n  then saves ONE H.264 MP4 in output/.\n\nGLOBAL DEFAULTS\n• Duration = 15 sec raw H3 target per clip.\n• Motion Context overlap = 39 frames (~1.625 sec), so each continuation\n  contributes roughly 13.4 sec of NEW footage after trimming.\n• Audio timeline context = 39 frames.\n• Resolution = 0.5 MP, 16:9, rounded to multiple of 32.\n\nOPTIONAL FULL PREVIOUS AUDIO REF\n• A separate red experimental section can feed each previous clip's ENTIRE delivered audio into the next Ref2VA clip.\n• Use the 'FULL PREVIOUS AUDIO REF — TOGGLE HERE' Fast Groups Muter button.\n• OFF by default.\n• WARNING: this can break seamless audio continuation or make music restart/replay. The tested stable configuration is with this option OFF."
+        "H3 SEAMLESS CHAIN — GLOBAL REFS + MOTION CONTEXT 39/39\n\nACTIVE BY DEFAULT\n• Clip 1 = Ref2VA start using GLOBAL CHARACTER REFS\n• Clip 2 = Ref2VA + Motion Context continuation\n\nOPTIONAL\n• Clip 3 and Clips 4–6 are present but bypassed.\n• Use the Fast Groups Bypasser panel to activate them SEQUENTIALLY:\n  Clip 3 → Clip 4 → Clip 5 → Clip 6.\n• Do not activate Clip 5 unless Clip 4 is active, etc.\n\nGLOBAL CHARACTER REFS\n• Select two images in the purple GLOBAL CHARACTER REFS group before queueing.\n• Ref 1 = face / identity.\n• Ref 2 = full body / wardrobe of the SAME character.\n• Both references are wired into every clip as <Picture 1> and <Picture 2>.\n\nMODELS / COMPATIBILITY\n• Video model = minimax_h3_ref2va_pruned_int8_convrot.safetensors\n• Text encoder = qwen3vl_32b_minimax_h3_int8_convrot.safetensors\n• Requires this H3 Context node pack; multi-ref timeline-audio compatibility is built in.\n• Compatibility fix and workflow by seitanism in the Banodoco MiniMax H3 thread.\n• Do not run the separately posted V2 patch script with this version.\n\nPREVIEWS\n• Each clip uses VHS Video Combine with save_output = false.\n• VHS writes preview media only to ComfyUI's temp directory, not output.\n• H.264 is used because browser preview is more reliable than H.265.\n\nNO PNG GALLERIES\n• No SaveImage nodes are used.\n• The chain uses raw IMAGE/AUDIO tensors directly, so PNG files are unnecessary.\n\nFINAL\n• The final VHS node concatenates decoded image/audio tensors first,\n  then saves ONE H.264 MP4 in output/.\n\nGLOBAL DEFAULTS\n• Duration = 15 sec raw H3 target per clip.\n• Motion Context overlap = 39 frames (~1.625 sec), so each continuation\n  contributes roughly 13.4 sec of NEW footage after trimming.\n• Audio timeline context = 39 frames.\n• Resolution = 0.5 MP, 16:9, rounded to multiple of 32.\n\nOPTIONAL FULL PREVIOUS AUDIO REF\n• A separate red experimental section can feed each previous clip's ENTIRE delivered audio into the next Ref2VA clip.\n• Use the 'FULL PREVIOUS AUDIO REF — TOGGLE HERE' Fast Groups Muter button.\n• OFF by default.\n• WARNING: this can break seamless audio continuation or make music restart/replay. The tested stable configuration is with this option OFF."
       ],
       "title": "READ ME"
     },
@@ -898,7 +898,7 @@
     },
     {
       "id": 132,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         240,
         -740
@@ -952,7 +952,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -1260,7 +1260,7 @@
     },
     {
       "id": 201,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         1770,
         -900
@@ -1345,7 +1345,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         39,
@@ -1662,7 +1662,7 @@
     },
     {
       "id": 222,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         3170,
         -850
@@ -1716,7 +1716,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -2112,7 +2112,7 @@
     },
     {
       "id": 301,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         1770,
         -50
@@ -2197,7 +2197,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         39,
@@ -2514,7 +2514,7 @@
     },
     {
       "id": 322,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         3170,
         0
@@ -2568,7 +2568,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -2964,7 +2964,7 @@
     },
     {
       "id": 401,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         1770,
         800
@@ -3049,7 +3049,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         39,
@@ -3366,7 +3366,7 @@
     },
     {
       "id": 422,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         3170,
         850
@@ -3420,7 +3420,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -3816,7 +3816,7 @@
     },
     {
       "id": 501,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         1770,
         1650
@@ -3901,7 +3901,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         39,
@@ -4218,7 +4218,7 @@
     },
     {
       "id": 522,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         3170,
         1700
@@ -4272,7 +4272,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -4668,7 +4668,7 @@
     },
     {
       "id": 601,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         1770,
         2500
@@ -4753,7 +4753,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         39,
@@ -5069,7 +5069,7 @@
     },
     {
       "id": 622,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         3170,
         2550
@@ -5121,7 +5121,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,

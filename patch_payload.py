@@ -29,7 +29,7 @@ import logging
 
 import comfy.model_base as model_base
 
-_LOG = logging.getLogger("h3_motion_context")
+_LOG = logging.getLogger("h3_suite")
 
 _orig_extra_conds = None
 _applied = False
@@ -46,7 +46,7 @@ def _patched_extra_conds(self, **kwargs):
     cond = out.get("minimax_payload", None)
     payload = getattr(cond, "cond", None) if cond is not None else None
     if not isinstance(payload, dict):
-        _LOG.warning("h3_motion_context: could not reach the H3 payload, "
+        _LOG.warning("h3_suite: could not reach the H3 payload, "
                      "keyframe latents may have been overwritten by refs")
         return out
 
@@ -72,13 +72,13 @@ def apply_patch():
         return True
     cls = getattr(model_base, "MiniMaxH3", None)
     if cls is None or not hasattr(cls, "extra_conds"):
-        _LOG.warning("h3_motion_context: MiniMaxH3.extra_conds not found, "
+        _LOG.warning("h3_suite: MiniMaxH3.extra_conds not found, "
                      "keyframes and refs cannot be combined")
         return False
     _orig_extra_conds = cls.extra_conds
     cls.extra_conds = _patched_extra_conds
     _applied = True
-    _LOG.info("h3_motion_context: keyframe/ref coexistence enabled")
+    _LOG.info("h3_suite: keyframe/ref coexistence enabled")
     return True
 
 

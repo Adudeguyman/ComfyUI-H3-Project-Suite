@@ -54,7 +54,7 @@
     },
     {
       "id": 175,
-      "type": "MiniMaxH3MotionContext",
+      "type": "H3Context",
       "pos": [
         -2180,
         5590
@@ -139,7 +139,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContext"
+        "Node name for S&R": "H3Context"
       },
       "widgets_values": [
         2,
@@ -863,7 +863,7 @@
     },
     {
       "id": 167,
-      "type": "MiniMaxH3MotionContextTrim",
+      "type": "H3ContextTrim",
       "pos": [
         -2180,
         5940
@@ -913,7 +913,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextTrim"
+        "Node name for S&R": "H3ContextTrim"
       },
       "widgets_values": [
         0,
@@ -1120,7 +1120,7 @@
     },
     {
       "id": 178,
-      "type": "MiniMaxH3MotionContextLoadLatent",
+      "type": "H3ContextLoadLatent",
       "pos": [
         -2480,
         5590
@@ -1143,7 +1143,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextLoadLatent"
+        "Node name for S&R": "H3ContextLoadLatent"
       },
       "widgets_values": [
         "h3_context",
@@ -1240,7 +1240,7 @@
     },
     {
       "id": 179,
-      "type": "MiniMaxH3MotionContextSaveLatent",
+      "type": "H3ContextSaveLatent",
       "pos": [
         -1370,
         6190
@@ -1269,7 +1269,7 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "MiniMaxH3MotionContextSaveLatent"
+        "Node name for S&R": "H3ContextSaveLatent"
       },
       "widgets_values": [
         "h3_context/clip",
@@ -1372,7 +1372,7 @@
       "title": "H3 MOTION CONTEXT - QUICK START",
       "properties": {},
       "widgets_values": [
-        "H3 MOTION CONTEXT - QUICK START\n\nThis workflow chains clips so motion AND audio continue across joins.\n\nFIRST CLIP OF A CHAIN (nothing to continue from yet):\n- Mute/bypass the H3 Motion Context group\n- Generate as normal. Save Latent runs with clip_index = 1\n\nEVERY CLIP AFTER THAT:\n- Unmute everything\n- context_frames <- the previous clip's video (load it from disk)\n- Load Latent clip_index = the clip to CONTINUE FROM (previous clip)\n- Save Latent clip_index = the clip you are making NOW\n  (making clip 2 from clip 1: Load = 1, Save = 2)\n\nDON'T LIKE THE RESULT? Just queue again. Change nothing.\nThe retry reloads the previous clip and overwrites its own reject.\nWhen you LIKE it: bump both index numbers, load the new clip's\nframes, next clip (Load 1, Save 2; Load 2, Save 3; etc..).\n\nSETTINGS THAT WORK (tested): context_length \"22\", encode_mode \"video\",\nanchor_mode \"head\", audio_mode \"timeline\", audio_context_length \"22\".\n\nConcatenate the trimmed clips with a plain butt join - no crossfade\nneeded. Latents save to output/h3_context/ (clip_00001.safetensors = clip 1).\n\nDark Blue Headers: H3 Motion Context Nodes\nGreen Headers: Nodes which require user input between clips\n\nIMPORTANT:\n-Video Context Length in Frames is locked to 1, 5, 22, 39 ONLY. Selecting anything else will automatically step down to the first acceptable frame length. I recommend starting at 22 frames.\n-Audio Context Length in Frames can be any number you want up to the full clip. Only capture as much audio as is needed to carry forward the audio you want to preserve.\n\nIf you have rgthree installed, I recommend using the Easy Group Bypasser node."
+        "H3 MOTION CONTEXT - QUICK START\n\nThis workflow chains clips so motion AND audio continue across joins.\n\nFIRST CLIP OF A CHAIN (nothing to continue from yet):\n- Mute/bypass the H3 Context group\n- Generate as normal. Save Latent runs with clip_index = 1\n\nEVERY CLIP AFTER THAT:\n- Unmute everything\n- context_frames <- the previous clip's video (load it from disk)\n- Load Latent clip_index = the clip to CONTINUE FROM (previous clip)\n- Save Latent clip_index = the clip you are making NOW\n  (making clip 2 from clip 1: Load = 1, Save = 2)\n\nDON'T LIKE THE RESULT? Just queue again. Change nothing.\nThe retry reloads the previous clip and overwrites its own reject.\nWhen you LIKE it: bump both index numbers, load the new clip's\nframes, next clip (Load 1, Save 2; Load 2, Save 3; etc..).\n\nSETTINGS THAT WORK (tested): context_length \"22\", encode_mode \"video\",\nanchor_mode \"head\", audio_mode \"timeline\", audio_context_length \"22\".\n\nConcatenate the trimmed clips with a plain butt join - no crossfade\nneeded. Latents save to output/h3_context/ (clip_00001.safetensors = clip 1).\n\nDark Blue Headers: H3 Context Nodes\nGreen Headers: Nodes which require user input between clips\n\nIMPORTANT:\n-Video Context Length in Frames is locked to 1, 5, 22, 39 ONLY. Selecting anything else will automatically step down to the first acceptable frame length. I recommend starting at 22 frames.\n-Audio Context Length in Frames can be any number you want up to the full clip. Only capture as much audio as is needed to carry forward the audio you want to preserve.\n\nIf you have rgthree installed, I recommend using the Easy Group Bypasser node."
       ],
       "color": "#008181",
       "bgcolor": "rgba(24,24,27,.9)"
@@ -1803,7 +1803,7 @@
     },
     {
       "id": 8,
-      "title": "H3 Motion Context - Bypass to Generate New Clips",
+      "title": "H3 Context - Bypass to Generate New Clips",
       "bounding": [
         -2490,
         5520,

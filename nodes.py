@@ -3,7 +3,7 @@
 Wire it between a stock H3 conditioning node and the sampler:
 
     MiniMaxH3ImageToVideo / MiniMaxH3ReferenceToVideo (or the t2v path)
-        -> H3 Motion Context
+        -> H3 Context
         -> guider / sampler
 
 Two axes to test, both cheap.
@@ -49,7 +49,7 @@ try:
 except ImportError:
     torchaudio = None
 
-_LOG = logging.getLogger("h3_motion_context")
+_LOG = logging.getLogger("h3_suite")
 
 FRAME_PER_TOKEN = (1, 4, 4, 4, 4)
 FPS = 24  # H3's native rate; audio latents run at 40 Hz, hence FRAME_RESCALE 5/3
@@ -100,13 +100,13 @@ def _encode_tail_audio(audio_vae, audio, seconds):
     if sr != vae_sr:
         if torchaudio is None:
             raise RuntimeError(
-                "h3_motion_context: context_audio is %d Hz but the VAE wants %d Hz "
+                "h3_suite: context_audio is %d Hz but the VAE wants %d Hz "
                 "and torchaudio is not available to resample." % (sr, vae_sr))
         waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
     want = int(round(seconds * vae_sr))
     have = int(waveform.shape[-1])
     if have < want:
-        _LOG.warning("h3_motion_context: context_audio is %.3fs, shorter than the "
+        _LOG.warning("h3_suite: context_audio is %.3fs, shorter than the "
                      "%.3fs of pinned video. Pinning what there is.",
                      have / vae_sr, seconds)
     else:
@@ -129,10 +129,10 @@ def _streams_from_latent(latent):
         parts = list(samples)
     else:
         raise ValueError(
-            "h3_motion_context: expected a MiniMax H3 AV latent (a nested "
+            "h3_suite: expected a MiniMax H3 AV latent (a nested "
             "video/audio pair), got %r" % type(samples))
     if not parts:
-        raise ValueError("h3_motion_context: AV latent contains no streams")
+        raise ValueError("h3_suite: AV latent contains no streams")
     return parts
 
 
@@ -142,7 +142,7 @@ def _video_from_latent(latent):
     if video.ndim == 4:  # unbatched [C,T,H,W]
         video = video.unsqueeze(0)
     if video.ndim != 5:
-        raise ValueError("h3_motion_context: expected video latent [B,C,T,H,W], "
+        raise ValueError("h3_suite: expected video latent [B,C,T,H,W], "
                          "got shape %s" % (tuple(video.shape),))
     return video
 
@@ -163,7 +163,7 @@ def _audio_tail_from_latent(latent, a_frames):
     parts = _streams_from_latent(latent)
     if len(parts) < 2:
         raise ValueError(
-            "h3_motion_context: context_latent has no audio stream. Wire the "
+            "h3_suite: context_latent has no audio stream. Wire the "
             "sampler output of an H3 AV graph, not a video-only latent.")
     video, audio = parts[0], parts[1]
     if video.ndim == 4:
@@ -171,28 +171,28 @@ def _audio_tail_from_latent(latent, a_frames):
     if audio.ndim == 3:  # unbatched [C,2,T]
         audio = audio.unsqueeze(0)
     if audio.ndim != 4:
-        raise ValueError("h3_motion_context: expected audio latent [B,C,2,T], "
+        raise ValueError("h3_suite: expected audio latent [B,C,2,T], "
                          "got shape %s" % (tuple(audio.shape),))
     total_t = int(audio.shape[-1])
     frames = _pixel_frames(int(video.shape[2]))
     overhang = total_t - FRAME_RESCALE * frames
     if not (0.0 <= overhang < 1.0):
         _LOG.warning(
-            "h3_motion_context: context_latent audio grid is unexpected "
+            "h3_suite: context_latent audio grid is unexpected "
             "(%d steps for %d frames); assuming no overhang.", total_t, frames)
         overhang = 0.0
     rt = int(round(a_frames / float(FPS) * AUDIO_HZ))
     if rt > total_t:
-        _LOG.warning("h3_motion_context: asked for %d audio steps, the latent "
+        _LOG.warning("h3_suite: asked for %d audio steps, the latent "
                      "has %d. Pinning all of it.", rt, total_t)
         rt = total_t
     if rt < 1:
-        raise ValueError("h3_motion_context: audio window is empty")
+        raise ValueError("h3_suite: audio window is empty")
     tail = audio[:1, ..., total_t - rt:].clone()
     return tail, rt, float(overhang)
 
 
-class MiniMaxH3MotionContext:
+class H3Context:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -275,7 +275,7 @@ class MiniMaxH3MotionContext:
               context_audio=None):
         if not is_applied():
             raise RuntimeError(
-                "h3_motion_context: the layout patch is not active, so interior "
+                "h3_suite: the layout patch is not active, so interior "
                 "anchors would be rejected by ComfyUI. Check the startup log for "
                 "the self-test failure reason.")
 
@@ -288,9 +288,9 @@ class MiniMaxH3MotionContext:
         available = int(context_frames.shape[0])
         n = min(int(context_length), available)
         if n < 1:
-            raise ValueError("h3_motion_context: context_frames is empty")
+            raise ValueError("h3_suite: context_frames is empty")
         if n < context_length:
-            _LOG.warning("h3_motion_context: only %d frames supplied, pinning %d",
+            _LOG.warning("h3_suite: only %d frames supplied, pinning %d",
                          available, n)
 
         if encode_mode == "video":
@@ -302,13 +302,13 @@ class MiniMaxH3MotionContext:
             run = next(g for g in VIDEO_RUN_GRID if g <= n)
             if run != n:
                 _LOG.warning(
-                    "h3_motion_context: %d frames is off the VAE grid; pinning "
+                    "h3_suite: %d frames is off the VAE grid; pinning "
                     "the last %d instead (usable runs: 1, 5, 22, 39)", n, run)
             n = run
 
         if n >= frame_count:
             raise ValueError(
-                "h3_motion_context: asked to pin %d frames into a %d frame clip. "
+                "h3_suite: asked to pin %d frames into a %d frame clip. "
                 "The pinned run must be a small fraction of the timeline."
                 % (n, frame_count))
 
@@ -320,7 +320,7 @@ class MiniMaxH3MotionContext:
             enc = vae.encode(tail)
             if getattr(enc, "ndim", 0) != 5:
                 raise ValueError(
-                    "h3_motion_context: video-mode encode returned shape %s, "
+                    "h3_suite: video-mode encode returned shape %s, "
                     "expected [B,C,T,H,W]. Try encode_mode=frames."
                     % (tuple(getattr(enc, "shape", ())),))
             steps = int(enc.shape[2])
@@ -332,7 +332,7 @@ class MiniMaxH3MotionContext:
                 # pinned content no longer lines up with the positions we
                 # would write. Refuse rather than render a shifted join.
                 raise RuntimeError(
-                    "h3_motion_context: %d frames encoded to %d latent steps "
+                    "h3_suite: %d frames encoded to %d latent steps "
                     "covering %d frames; the VAE grid no longer matches "
                     "VIDEO_RUN_GRID. Upstream VAE change, refusing to run."
                     % (n, steps, covered))
@@ -372,7 +372,7 @@ class MiniMaxH3MotionContext:
         if context_latent is not None or context_audio is not None:
             if not payload_patch_applied():
                 raise RuntimeError(
-                    "h3_motion_context: the payload patch is not active. Without it "
+                    "h3_suite: the payload patch is not active. Without it "
                     "the audio ref would overwrite the pinned video latents and the "
                     "motion context would be lost. Check the startup log.")
             # the audio window is independent of the video one: audio cond
@@ -380,7 +380,7 @@ class MiniMaxH3MotionContext:
             a_frames = int(audio_context_length) or span
             if context_latent is not None:
                 if context_audio is not None:
-                    _LOG.info("h3_motion_context: both context_latent and "
+                    _LOG.info("h3_suite: both context_latent and "
                               "context_audio wired; using the latent (skips "
                               "one VAE round trip).")
                 audio_latent, ref_audio_t, overhang = _audio_tail_from_latent(
@@ -389,7 +389,7 @@ class MiniMaxH3MotionContext:
             else:
                 if audio_vae is None:
                     raise ValueError(
-                        "h3_motion_context: context_audio supplied without "
+                        "h3_suite: context_audio supplied without "
                         "audio_vae. Wire the H3 audio VAE, or wire "
                         "context_latent instead.")
                 audio_latent, ref_audio_t = _encode_tail_audio(
@@ -429,7 +429,7 @@ class MiniMaxH3MotionContext:
                 out, {"minimax_refs": [motion_context_audio_ref]}, append=True)
 
         trim = span if anchor_mode == "head" else 0
-        _LOG.info("h3_motion_context: %s/%s, %d frames -> %d cond blocks at "
+        _LOG.info("h3_suite: %s/%s, %d frames -> %d cond blocks at "
                   "indices %d..%d, %d frame clip at %dx%d, trim %d, audio %s",
                   encode_mode, anchor_mode, n, len(blocks),
                   indices[0], indices[-1], frame_count, width, height, trim,
@@ -442,7 +442,7 @@ class MiniMaxH3MotionContext:
         return (out, trim)
 
 
-class MiniMaxH3MotionContextTrim:
+class H3ContextTrim:
     """Drop the pinned head off a decoded clip, picture and sound together.
 
     The pinned frames occupy the start of the delivered timeline, so they
@@ -506,7 +506,7 @@ class MiniMaxH3MotionContextTrim:
         total = int(images.shape[0])
         if n >= total:
             raise ValueError(
-                "h3_motion_context: asked to trim %d frames from a %d frame clip"
+                "h3_suite: asked to trim %d frames from a %d frame clip"
                 % (n, total))
         out_images = images[n:] if n else images
 
@@ -519,7 +519,7 @@ class MiniMaxH3MotionContextTrim:
             length = int(waveform.shape[-1])
             if cut >= length:
                 raise ValueError(
-                    "h3_motion_context: trimming %.3fs from %.3fs of audio would "
+                    "h3_suite: trimming %.3fs from %.3fs of audio would "
                     "leave nothing. Check that fps matches the clip."
                     % (seconds, length / sr))
             waveform = waveform[..., cut:]
@@ -531,22 +531,22 @@ class MiniMaxH3MotionContextTrim:
                 if have > want:
                     over = have - want
                     waveform = waveform[..., :want]
-                    _LOG.info("h3_motion_context: tail trimmed %d samples "
+                    _LOG.info("h3_suite: tail trimmed %d samples "
                               "(%.2fms) so audio matches %d frames exactly",
                               over, over / sr * 1000.0, frames_left)
                 elif have < want:
-                    _LOG.warning("h3_motion_context: audio is %.2fms shorter than "
+                    _LOG.warning("h3_suite: audio is %.2fms shorter than "
                                  "%d frames; leaving the tail alone",
                                  (want - have) / sr * 1000.0, frames_left)
 
             out_audio = {"waveform": waveform, "sample_rate": sr}
-            _LOG.info("h3_motion_context: %d frames / %.4fs picture, %.4fs sound, "
+            _LOG.info("h3_suite: %d frames / %.4fs picture, %.4fs sound, "
                       "drift %.2fms",
                       total - n, (total - n) / float(fps),
                       int(waveform.shape[-1]) / sr,
                       abs((total - n) / float(fps) - int(waveform.shape[-1]) / sr) * 1000.0)
         elif n:
-            _LOG.info("h3_motion_context: trimmed %d leading frames, %d remain. "
+            _LOG.info("h3_suite: trimmed %d leading frames, %d remain. "
                       "No audio wired; if this clip has sound, mux it through "
                       "this node or it will run %.3fs ahead of the picture.",
                       n, total - n, n / float(fps))
@@ -603,7 +603,7 @@ def _resolve_latent_path(path, clip_index=0):
                                  near[0].replace("_%05d_" % idx,
                                                  "_%05d" % idx)))
                     raise FileNotFoundError(
-                        "h3_motion_context: no saved latent for clip %d "
+                        "h3_suite: no saved latent for clip %d "
                         "(no *_%05d.safetensors in %s).%s"
                         % (idx, idx, c, hint))
             else:
@@ -611,15 +611,15 @@ def _resolve_latent_path(path, clip_index=0):
                          if f.endswith(".safetensors")]
                 if not files:
                     raise FileNotFoundError(
-                        "h3_motion_context: no saved latents in %s. Run a "
+                        "h3_suite: no saved latents in %s. Run a "
                         "clip with the Save Latent node first." % c)
             return max(files, key=os.path.getmtime)
     raise FileNotFoundError(
-        "h3_motion_context: %r is neither a file nor a folder (also tried "
+        "h3_suite: %r is neither a file nor a folder (also tried "
         "relative to the ComfyUI output directory)." % p)
 
 
-class MiniMaxH3MotionContextSaveLatent:
+class H3ContextSaveLatent:
     """Save an H3 AV latent to disk so the NEXT run can load it.
 
     Wiring the sampler's output straight into context_latent is a cycle:
@@ -666,12 +666,12 @@ class MiniMaxH3MotionContextSaveLatent:
 
     def save(self, latent, filename_prefix, clip_index=0):
         if _st_save is None:
-            raise RuntimeError("h3_motion_context: safetensors is not "
+            raise RuntimeError("h3_suite: safetensors is not "
                                "available; cannot save latents.")
         parts = _streams_from_latent(latent)
         if len(parts) < 2:
             raise ValueError(
-                "h3_motion_context: latent has no audio stream; wire the "
+                "h3_suite: latent has no audio stream; wire the "
                 "sampler output of an H3 AV graph.")
         video = parts[0].cpu().contiguous()
         audio = parts[1].cpu().contiguous()
@@ -690,12 +690,12 @@ class MiniMaxH3MotionContextSaveLatent:
                                 % (filename, counter))
         _st_save({"video": video, "audio": audio}, path,
                  metadata={"format": "h3_motion_context_av_v1"})
-        _LOG.info("h3_motion_context: saved AV latent to %s (video %s, "
+        _LOG.info("h3_suite: saved AV latent to %s (video %s, "
                   "audio %s)", path, tuple(video.shape), tuple(audio.shape))
         return (path,)
 
 
-class MiniMaxH3MotionContextLoadLatent:
+class H3ContextLoadLatent:
     """Load a saved H3 AV latent for the context_latent input.
 
     clip_index means exactly what it says: set it to the clip you want to
@@ -737,7 +737,7 @@ class MiniMaxH3MotionContextLoadLatent:
     RETURN_TYPES = ("LATENT",)
     FUNCTION = "load"
     CATEGORY = "conditioning/minimax"
-    DESCRIPTION = ("Load a latent saved by H3 Motion Context Save Latent, "
+    DESCRIPTION = ("Load a latent saved by H3 Context Save Latent, "
                    "for the context_latent input only.")
 
     @classmethod
@@ -754,16 +754,16 @@ class MiniMaxH3MotionContextLoadLatent:
 
     def load(self, latent_path, clip_index=0):
         if _st_load is None:
-            raise RuntimeError("h3_motion_context: safetensors is not "
+            raise RuntimeError("h3_suite: safetensors is not "
                                "available; cannot load latents.")
         path = _resolve_latent_path(latent_path, clip_index)
         data = _st_load(path)
         if "video" not in data or "audio" not in data:
             raise ValueError(
-                "h3_motion_context: %s is not an h3_motion_context latent "
+                "h3_suite: %s is not an H3 AV context latent "
                 "(missing video/audio streams). Was it saved by the stock "
                 "Save Latent node instead?" % path)
-        _LOG.info("h3_motion_context: loaded AV latent from %s", path)
+        _LOG.info("h3_suite: loaded AV latent from %s", path)
         # a plain list, not a NestedTensor: only this repo's context_latent
         # input accepts it, which is the point -- it cannot be mistaken
         # for a decodable latent without failing loudly downstream
@@ -771,14 +771,14 @@ class MiniMaxH3MotionContextLoadLatent:
 
 
 NODE_CLASS_MAPPINGS = {
-    "MiniMaxH3MotionContext": MiniMaxH3MotionContext,
-    "MiniMaxH3MotionContextTrim": MiniMaxH3MotionContextTrim,
-    "MiniMaxH3MotionContextSaveLatent": MiniMaxH3MotionContextSaveLatent,
-    "MiniMaxH3MotionContextLoadLatent": MiniMaxH3MotionContextLoadLatent,
+    "H3Context": H3Context,
+    "H3ContextTrim": H3ContextTrim,
+    "H3ContextSaveLatent": H3ContextSaveLatent,
+    "H3ContextLoadLatent": H3ContextLoadLatent,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "MiniMaxH3MotionContext": "H3 Motion Context",
-    "MiniMaxH3MotionContextTrim": "H3 Motion Context Trim",
-    "MiniMaxH3MotionContextSaveLatent": "H3 Motion Context Save Latent",
-    "MiniMaxH3MotionContextLoadLatent": "H3 Motion Context Load Latent",
+    "H3Context": "H3 Context",
+    "H3ContextTrim": "H3 Context Trim",
+    "H3ContextSaveLatent": "H3 Context Save Latent",
+    "H3ContextLoadLatent": "H3 Context Load Latent",
 }

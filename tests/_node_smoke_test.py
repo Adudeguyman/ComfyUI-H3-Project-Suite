@@ -1,4 +1,4 @@
-"""Smoke test: run MiniMaxH3MotionContext.apply() end to end with fakes.
+"""Smoke test: run H3Context.apply() end to end with fakes.
 
 Fakes ComfyUI's modules and tensor ops (numpy-backed) and drives the node
 exactly as a graph would: a 124-frame clip at 480x864, 22 context frames,
@@ -174,7 +174,7 @@ def main():
             steps = max(1, (n - 5) // 17 * 5 + 2)
             return T(np.zeros((1, 16, steps, h, w), dtype=np.float32))
 
-    node = nodes.MiniMaxH3MotionContext()
+    node = nodes.H3Context()
     # Simulate conditioning produced by MiniMaxH3ReferenceToVideo. Motion
     # Context must append its timeline-audio block without dropping either
     # existing Ref2VA block.
@@ -246,8 +246,8 @@ def main():
 
     # save -> load -> context_latent roundtrip across "runs"
     import time
-    saver = nodes.MiniMaxH3MotionContextSaveLatent()
-    loader = nodes.MiniMaxH3MotionContextLoadLatent()
+    saver = nodes.H3ContextSaveLatent()
+    loader = nodes.H3ContextLoadLatent()
     (p1,) = saver.save(prev, "h3_context/clip")
     time.sleep(0.02)
     prev2 = {"samples": Nested([

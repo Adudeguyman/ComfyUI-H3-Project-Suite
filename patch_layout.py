@@ -43,7 +43,7 @@ import comfy.ldm.minimax.model as mm
 
 MC_KEY = "motion_context_index"
 MC_AUDIO_KEY = "motion_context_audio_end_frame"
-_LOG = logging.getLogger("h3_motion_context")
+_LOG = logging.getLogger("h3_suite")
 
 _orig_init = None
 _applied = False
@@ -70,7 +70,21 @@ def _ref_cursor_advance(refs):
         elif kind in ("video", "video_audio"):
             rt = float(blk.get("ref_audio_t", 0))
             vt = int(blk.get("latent_t", 0))
+            if not rt and not vt:
+                raise RuntimeError(
+                    "h3_suite: %r ref carries neither ref_audio_t nor "
+                    "latent_t, so its cursor advance is unknowable. Every "
+                    "coordinate after it would be wrong; refusing to guess."
+                    % kind)
             cursor += max(rt, sum(mm._video_t_spans(vt)))
+        else:
+            # silently contributing 0 for an unrecognised kind would slide
+            # every later ref, the pinned audio window and the keyframe
+            # anchors by that block's real width -- a seam that drifts for
+            # no visible reason. Fail where the cause is still legible.
+            raise RuntimeError(
+                "h3_suite: unrecognised ref kind %r in the "
+                "conditioning. Cannot compute the layout cursor." % kind)
     return cursor
 
 
@@ -101,13 +115,13 @@ def _fixup(layout, text_len, latent_t, frame_count, keyframes, refs=None):
         # relative to ours and to the target. Nothing produces this today;
         # refuse loudly in case something ever does.
         raise RuntimeError(
-            "h3_motion_context: stock and motion-context keyframes mixed in "
+            "h3_suite: stock and motion-context keyframes mixed in "
             "one graph alongside a ref; their coordinates would disagree. "
             "Give every keyframe a %s entry or remove the refs." % MC_KEY)
     cond_spans = [(a, b) for a, b, kind in layout.segments if kind == "cond"]
     if len(cond_spans) != len(keyframes):
         raise RuntimeError(
-            "h3_motion_context: expected %d cond segments, layout has %d. "
+            "h3_suite: expected %d cond segments, layout has %d. "
             "Refusing to rewrite positions."
             % (len(keyframes), len(cond_spans)))
     for (a, b), kf in zip(cond_spans, keyframes):
@@ -156,19 +170,19 @@ def _fixup_audio(layout, text_len, refs):
                   if r.get(MC_AUDIO_KEY) is not None]
     if len(marked_idx) != 1:
         raise RuntimeError(
-            "h3_motion_context: audio timeline placement requires exactly one "
+            "h3_suite: audio timeline placement requires exactly one "
             "ref marked with %s; layout has %d refs, %d marked."
             % (MC_AUDIO_KEY, len(refs), len(marked_idx)))
     idx = marked_idx[0]
     if idx != len(refs) - 1:
         raise RuntimeError(
-            "h3_motion_context: the marked Motion Context audio ref must be "
+            "h3_suite: the marked Motion Context audio ref must be "
             "the last ref block. Apply Motion Context after the stock MiniMax "
             "H3 conditioning node so existing refs are preserved first.")
     blk = refs[idx]
     if blk.get("kind") != "audio":
         raise RuntimeError(
-            "h3_motion_context: %s set on a %r ref; only audio refs can be "
+            "h3_suite: %s set on a %r ref; only audio refs can be "
             "moved onto the timeline." % (MC_AUDIO_KEY, blk.get("kind")))
     rt = int(blk.get("ref_audio_t", 0))
     if rt <= 0:
@@ -187,7 +201,7 @@ def _fixup_audio(layout, text_len, refs):
     count = int(sel.sum())
     if count < rt or count > 8 * rt:
         raise RuntimeError(
-            "h3_motion_context: found %d rows in the marked audio ref slot "
+            "h3_suite: found %d rows in the marked audio ref slot "
             "[%.4f, %.4f) for %d latent steps, expected between %d and %d. "
             "Upstream layout change or overlapping coordinates; refusing to "
             "move audio rows."
@@ -397,7 +411,7 @@ def apply_patch():
     if _applied:
         return True
     if not hasattr(mm, "PackedLayout") or not hasattr(mm, "FRAME_RESCALE"):
-        _LOG.warning("h3_motion_context: MiniMax H3 model module missing expected "
+        _LOG.warning("h3_suite: MiniMax H3 model module missing expected "
                      "attributes, patch not applied")
         return False
     _orig_init = mm.PackedLayout.__init__
@@ -405,12 +419,12 @@ def apply_patch():
         _self_test()
     except Exception as exc:
         _orig_init = None
-        _LOG.warning("h3_motion_context: self-test failed (%s), patch not applied. "
+        _LOG.warning("h3_suite: self-test failed (%s), patch not applied. "
                      "Interior keyframe anchors unavailable.", exc)
         return False
     mm.PackedLayout.__init__ = _patched_init
     _applied = True
-    _LOG.info("h3_motion_context: interior keyframe anchors enabled")
+    _LOG.info("h3_suite: interior keyframe anchors enabled")
     return True
 
 
