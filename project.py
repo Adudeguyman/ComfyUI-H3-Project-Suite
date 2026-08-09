@@ -497,6 +497,80 @@ class Project:
         self._write()
         return dropped
 
+    def _size_of(self, basename, folder=None):
+        total = 0
+        for ext in (VIDEO_EXT, LATENT_EXT, SIDECAR_EXT):
+            path = os.path.join(folder or self.clips_dir, basename + ext)
+            if os.path.isfile(path):
+                total += os.path.getsize(path)
+        return total
+
+    def storage_report(self):
+        """What this project costs, split by what you can safely reclaim.
+
+        Three buckets: the chain itself (selected takes - never removable
+        without losing clips), alternates (extra takes still live in
+        clips/, reclaimable by cleanup), and trash (already discarded,
+        reclaimable by purge but still branchable until then).
+        """
+        chain = alternates = 0
+        alt_count = 0
+        for c in self.clips:
+            chain += self._size_of(c["basename"])
+            for t in self.takes_of(c["index"]):
+                if t["basename"] == c["basename"] or t.get("trashed"):
+                    continue
+                if os.path.isfile(os.path.join(self.clips_dir,
+                                               t["basename"] + VIDEO_EXT)):
+                    alternates += self._size_of(t["basename"])
+                    alt_count += 1
+        trash = 0
+        trash_count = 0
+        if os.path.isdir(self.trash_dir):
+            for entry in os.listdir(self.trash_dir):
+                path = os.path.join(self.trash_dir, entry)
+                if os.path.isfile(path):
+                    trash += os.path.getsize(path)
+                    if entry.endswith(VIDEO_EXT):
+                        trash_count += 1
+        return {
+            "chain_bytes": chain, "chain_clips": len(self.clips),
+            "alternate_bytes": alternates, "alternate_takes": alt_count,
+            "trash_bytes": trash, "trash_takes": trash_count,
+            "total_bytes": chain + alternates + trash,
+        }
+
+    def cleanup_takes(self, dry_run=False):
+        """Trash every alternate take across the whole project.
+
+        Selected takes are untouched, so the chain is unaffected. What
+        moves is only what an extra render produced and you did not keep.
+        They land in .trash/, so a branch can still reach them until a
+        purge - that two-step is deliberate: an alternate take is the raw
+        material for 'actually, I liked take 2'.
+        """
+        planned = []
+        freed = 0
+        for c in self.clips:
+            for t in self.takes_of(c["index"]):
+                if t["basename"] == c["basename"] or t.get("trashed"):
+                    continue
+                if not os.path.isfile(os.path.join(
+                        self.clips_dir, t["basename"] + VIDEO_EXT)):
+                    continue
+                planned.append({"index": c["index"], "take": t["take"],
+                                "basename": t["basename"],
+                                "bytes": self._size_of(t["basename"])})
+                freed += planned[-1]["bytes"]
+        if dry_run:
+            return {"planned": planned, "bytes": freed}
+        for c in self.clips:
+            if any(p["index"] == c["index"] for p in planned):
+                self.discard_other_takes(c["index"])
+        _LOG.info("h3_suite: cleaned %d alternate take(s) into .trash/ "
+                  "(%.1f MB)", len(planned), freed / (1024.0 * 1024.0))
+        return {"planned": planned, "bytes": freed}
+
     def approve(self):
         pend = self.pending()
         if pend is None:

@@ -158,6 +158,13 @@ function el(tag, attrs = {}, ...children) {
   return e;
 }
 
+function mb(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024 * 1024) return (n / 1073741824).toFixed(2) + " GB";
+  if (n >= 1024 * 1024) return (n / 1048576).toFixed(1) + " MB";
+  return Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
 function toast(msg, bad = false) {
   const t = el("div", { class: "h3p-toast" + (bad ? " bad" : ""), text: msg });
   document.body.append(t);
@@ -761,6 +768,10 @@ class ProjectModal extends ChainTimeline {
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),
+          el("button", { class: "h3p-btn", text: "Clean up takes",
+                         title: "move every alternate take to .trash/; " +
+                                "the chain is untouched",
+                         onclick: () => this.cleanupTakes() }),
           el("button", { class: "h3p-btn", text: "Purge trash",
                          onclick: () => this.purge() }),
           el("button", { class: "h3p-x", text: "\u2715",
@@ -989,10 +1000,50 @@ class ProjectModal extends ChainTimeline {
     } catch (e) { toast(e.message, true); }
   }
 
-  purge() {
+  async cleanupTakes() {
+    let plan;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/storage?name=` +
+        `${encodeURIComponent(this.name())}`);
+      plan = await r.json();
+      if (plan.error) throw new Error(plan.error);
+    } catch (e) { toast(e.message, true); return; }
+    const n = plan.cleanup.planned.length;
+    if (!n) { toast("no alternate takes to clean up"); return; }
+    const list = plan.cleanup.planned
+      .map((t) => `  clip ${t.index} take ${t.take} (${mb(t.bytes)})`)
+      .join("\n");
     this.showConfirm(
-      "Empty this project's .trash/? Rejected and superseded takes in it " +
-      "are deleted permanently.",
+      `Move ${n} alternate take${n === 1 ? "" : "s"} to .trash/, ` +
+      `freeing ${mb(plan.cleanup.bytes)} from clips/?\n\n${list}\n\n` +
+      `The chain itself is untouched. These stay branchable from .trash/ ` +
+      `until you purge.`,
+      async () => {
+        try {
+          const out = await post("/h3_suite/project/cleanup_takes",
+                                 { name: this.name() });
+          toast(`${out.cleaned} take(s) moved to trash, ${mb(out.bytes)}`);
+          this.refresh(true);
+        } catch (e) { toast(e.message, true); }
+      });
+  }
+
+  async purge() {
+    let s = null;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/storage?name=` +
+        `${encodeURIComponent(this.name())}`);
+      s = await r.json();
+    } catch (e) { /* fall back to the generic wording */ }
+    const detail = s && !s.error
+      ? `${s.trash_takes} take${s.trash_takes === 1 ? "" : "s"} ` +
+        `(${mb(s.trash_bytes)})`
+      : "everything in .trash/";
+    this.showConfirm(
+      `Permanently delete ${detail}?\n\nThese are rejected and ` +
+      `discarded takes. After this they can no longer be branched from.`,
       () => this.act("purge_trash", "trash purged"));
   }
 
@@ -1019,8 +1070,16 @@ class ProjectModal extends ChainTimeline {
     if (refetch) {
       try {
         this.state = await getState(this.name());
+        try {
+          const r = await api.fetchApi(
+            `/h3_suite/project/storage?name=` +
+            `${encodeURIComponent(this.name())}`);
+          const sd = await r.json();
+          this.storage = sd.error ? null : sd;
+        } catch (e) { this.storage = null; }
       } catch (e) {
         this.state = { missing: String(e.message || e) };
+        this.storage = null;
       }
     }
     this.render();
@@ -1281,11 +1340,21 @@ class ProjectModal extends ChainTimeline {
   paintFoot(approved, tail, name) {
     const dur = this.total
       ? ` \u00b7 ${this.total.toFixed(1)}s total` : "";
+    let disk = "";
+    const s = this.storage;
+    if (s) {
+      disk = ` \u00b7 ${mb(s.chain_bytes)} chain`;
+      if (s.alternate_takes) {
+        disk += `, ${mb(s.alternate_bytes)} in ${s.alternate_takes} ` +
+                `alternate take${s.alternate_takes === 1 ? "" : "s"}`;
+      }
+      if (s.trash_takes) disk += `, ${mb(s.trash_bytes)} trashed`;
+    }
     this.footText.textContent =
       `${approved.length} approved${dur} \u00b7 ` +
       (tail ? `chain tails clip ${tail.index}` :
               "chain inactive (fresh clip 1)") +
-      ` \u00b7 output/h3_projects/${name}`;
+      disk + ` \u00b7 output/h3_projects/${name}`;
   }
 }
 

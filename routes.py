@@ -111,13 +111,39 @@ def _register():
         out["dropped"] = dropped
         return out
 
+    @routes.get("/h3_suite/project/storage")
+    async def storage(request):
+        try:
+            p = _project(request)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        out = p.storage_report()
+        out["cleanup"] = p.cleanup_takes(dry_run=True)
+        return web.json_response(out)
+
+    @routes.post("/h3_suite/project/cleanup_takes")
+    @_json_post
+    def cleanup_takes(body):
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        result = p.cleanup_takes()
+        out = _state(p)
+        out["cleaned"] = len(result["planned"])
+        out["bytes"] = result["bytes"]
+        out["storage"] = p.storage_report()
+        return out
+
     @routes.post("/h3_suite/project/purge_trash")
     @_json_post
     def purge(body):
         import folder_paths as fp
         p = Project(fp.get_output_directory(), body.get("name"))
+        before = p.storage_report()["trash_bytes"]
         p.purge_trash()
-        return _state(p)
+        out = _state(p)
+        out["freed_bytes"] = before
+        out["storage"] = p.storage_report()
+        return out
 
     def _safe_export_name(raw, fallback):
         """A plain .mp4 filename inside the project root, never a path."""

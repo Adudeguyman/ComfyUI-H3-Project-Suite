@@ -258,6 +258,36 @@ def main():
     print("15. recovered take lives in clips/ as approved; neither purge "
           "can reach it")
 
+    # storage accounting and project-wide take cleanup
+    sp = Project(out, "Space", create=True)
+    for i, takes in ((1, [1]), (2, [1, 2, 3])):
+        for t in takes:
+            base = "clip_%03d_take%d" % (i, t)
+            for ext in (".mp4", ".safetensors"):
+                with open(os.path.join(sp.clips_dir, base + ext),
+                          "wb") as fh:
+                    fh.write(b"\0" * 4096)
+            sp.record_render(i, t, {"duration": 5.0})
+        sp.approve()
+    rep = sp.storage_report()
+    assert rep["chain_clips"] == 2 and rep["alternate_takes"] == 2, rep
+    dry = sp.cleanup_takes(dry_run=True)
+    assert len(dry["planned"]) == 2
+    assert sp.storage_report()["alternate_takes"] == 2, "dry run mutated"
+    sp.cleanup_takes()
+    rep2 = sp.storage_report()
+    assert rep2["alternate_takes"] == 0
+    assert rep2["chain_bytes"] == rep["chain_bytes"], "chain shrank!"
+    assert rep2["trash_takes"] == 2
+    for c in sp.clips:
+        assert os.path.isfile(os.path.join(sp.clips_dir,
+                                           c["basename"] + ".mp4"))
+    # still branchable out of trash until purged
+    rescue = branch_project(out, "Space", 2, "Space_alt", at_take=1)
+    assert rescue.chain_tail()["basename"] == "clip_002_take1"
+    print("16. cleanup_takes trashed %d alternates, chain untouched, "
+          "cleaned takes still branchable" % rep2["trash_takes"])
+
     print("all checks passed")
 
 
