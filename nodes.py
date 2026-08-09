@@ -200,7 +200,6 @@ class H3Context:
                 "conditioning": ("CONDITIONING",),
                 "vae": ("VAE",),
                 "latent": ("LATENT",),
-                "context_frames": ("IMAGE",),
                 "context_length": ("INT", {
                     "default": 5, "min": 1, "max": 39,
                     "tooltip": "Frames of the previous clip to carry over. In "
@@ -239,8 +238,25 @@ class H3Context:
                                "clip, which the model imitates (similar "
                                "music, not phase-locked) rather than "
                                "continues."}),
+                "video_source": (["frames", "latent"], {
+                    "default": "frames",
+                    "tooltip": "frames: pin decoded frames from "
+                               "context_frames (one VAE encode; each link "
+                               "adds a decode/encode round trip, which "
+                               "drifts color slightly down a chain). "
+                               "latent: EXPERIMENTAL - slice the pinned "
+                               "video straight from context_latent's tail, "
+                               "no VAE round trip at all, matching what the "
+                               "audio already does. Needs context_latent "
+                               "wired and the same resolution as the new "
+                               "clip; context_frames and encode_mode are "
+                               "ignored."}),
             },
             "optional": {
+                "context_frames": ("IMAGE", {
+                    "tooltip": "Decoded frames of the previous clip. Required "
+                               "when video_source is 'frames'; ignored on the "
+                               "latent path."}),
                 "context_latent": ("LATENT", {
                     "tooltip": "Previous clip's SAMPLER OUTPUT latent (the same "
                                "one you wire into the decode nodes). When "
@@ -269,22 +285,8 @@ class H3Context:
                    "never-denoised conditioning rows, so the model reads real "
                    "motion instead of guessing it from a single still.")
 
-    def apply(self, conditioning, vae, latent, context_frames, context_length,
-              encode_mode, anchor_mode, crop, audio_context_length=22,
-              audio_mode="timeline", context_latent=None, audio_vae=None,
-              context_audio=None):
-        if not is_applied():
-            raise RuntimeError(
-                "h3_suite: the layout patch is not active, so interior "
-                "anchors would be rejected by ComfyUI. Check the startup log for "
-                "the self-test failure reason.")
-
-        video = _video_from_latent(latent)
-        latent_t = int(video.shape[2])
-        width = int(video.shape[4]) * 16
-        height = int(video.shape[3]) * 16
-        frame_count = _pixel_frames(latent_t)
-
+    def _pin_from_frames(self, vae, context_frames, context_length,
+                         encode_mode, crop, width, height, frame_count):
         available = int(context_frames.shape[0])
         n = min(int(context_length), available)
         if n < 1:
@@ -344,6 +346,124 @@ class H3Context:
                 blocks.append(vae.encode(tail[i:i + 1]))
                 offsets.append(i)
             span = n
+        return blocks, offsets, span, n
+
+    def _pin_from_latent(self, context_latent, context_length, target_video,
+                         frame_count):
+        """Slice the pinned run straight from the previous clip's latent.
+
+        No decode and no re-encode: the pinned blocks ARE the previous
+        clip's own latent steps, so none of the VAE round trip's color
+        drift enters the chain. The catch is grid phase: latent steps
+        cover (1,4,4,4,4) pixel frames cycling by ABSOLUTE step index, so
+        the tail slice must start on a phase-0 boundary (step index
+        divisible by 5). Then the slice's internal coverage pattern is
+        identical to a fresh encode's and _step_offsets applies as-is.
+        H3 clip lengths are congruent 5 mod 17 by construction, which
+        makes T %% 5 == 2 and the phase-0 tail runs exactly 5, 22, 39...
+        pixel frames -- the familiar grid minus the 1-frame run.
+
+        EXPERIMENTAL: the sliced steps carry the causal VAE's temporal
+        context from earlier in the previous clip, which a fresh encode of
+        the same frames would not. Whether the model treats them
+        identically as cond rows is an empirical question; the seam is the
+        place to listen and look.
+        """
+        if context_latent is None:
+            raise ValueError(
+                "h3_suite: video_source is 'latent' but context_latent is "
+                "not wired. Wire the Load Latent output, or switch "
+                "video_source back to 'frames'.")
+        parts = _streams_from_latent(context_latent)
+        ctx = parts[0]
+        if getattr(ctx, "ndim", 0) == 4:
+            ctx = ctx.unsqueeze(0)
+        if getattr(ctx, "ndim", 0) != 5:
+            raise ValueError(
+                "h3_suite: context_latent video stream has shape %s, "
+                "expected [B,C,T,H,W]." % (tuple(getattr(ctx, "shape", ())),))
+        if (int(ctx.shape[3]) != int(target_video.shape[3])
+                or int(ctx.shape[4]) != int(target_video.shape[4])):
+            raise ValueError(
+                "h3_suite: context_latent is %dx%d latent but this clip is "
+                "%dx%d. The latent path cannot resize; render at the same "
+                "resolution or use video_source='frames'."
+                % (int(ctx.shape[4]), int(ctx.shape[3]),
+                   int(target_video.shape[4]), int(target_video.shape[3])))
+
+        total = int(ctx.shape[2])
+        n_req = int(context_length)
+        # phase-0 tail slices: start index k0 with k0 % 5 == 0. Their pixel
+        # coverage is _pixel_frames(total - k0), computable without touching
+        # the tensor. Collect what this clip's length makes available.
+        runs = []  # (covered, k0)
+        k0 = (total // 5) * 5
+        if k0 == total:
+            k0 -= 5
+        while k0 >= 0:
+            covered = _pixel_frames(total - k0)
+            runs.append((covered, k0))
+            if covered > max(n_req, 39):
+                break
+            k0 -= 5
+        usable = [(c, k) for c, k in runs if 0 < c <= n_req]
+        if not usable:
+            raise ValueError(
+                "h3_suite: no phase-aligned tail run of <= %d frames exists "
+                "in this %d-step context latent (available runs: %s frames). "
+                "Raise context_length or use video_source='frames'."
+                % (n_req, total, sorted(c for c, _ in runs if c > 0)))
+        covered, k0 = max(usable)
+        if covered != n_req:
+            _LOG.warning(
+                "h3_suite: %d frames is off this latent's phase grid; "
+                "pinning the last %d instead (available: %s)",
+                n_req, covered, sorted(c for c, _ in runs if c > 0))
+        if covered >= frame_count:
+            raise ValueError(
+                "h3_suite: asked to pin %d frames into a %d frame clip. "
+                "The pinned run must be a small fraction of the timeline."
+                % (covered, frame_count))
+
+        steps = total - k0
+        blocks = [ctx[:, :, k:k + 1] for k in range(k0, total)]
+        offsets = _step_offsets(steps)
+        _LOG.info("h3_suite: pinned video sliced from context_latent: steps "
+                  "%d..%d (%d frames), no VAE round trip", k0, total - 1,
+                  covered)
+        return blocks, offsets, covered
+
+    def apply(self, conditioning, vae, latent, context_length,
+              encode_mode, anchor_mode, crop, audio_context_length=22,
+              audio_mode="timeline", video_source="frames",
+              context_frames=None, context_latent=None, audio_vae=None,
+              context_audio=None):
+        if not is_applied():
+            raise RuntimeError(
+                "h3_suite: the layout patch is not active, so interior "
+                "anchors would be rejected by ComfyUI. Check the startup log for "
+                "the self-test failure reason.")
+
+        video = _video_from_latent(latent)
+        latent_t = int(video.shape[2])
+        width = int(video.shape[4]) * 16
+        height = int(video.shape[3]) * 16
+        frame_count = _pixel_frames(latent_t)
+
+        if video_source == "latent":
+            blocks, offsets, n = self._pin_from_latent(
+                context_latent, context_length, video, frame_count)
+            span = n
+        else:
+            if context_frames is None:
+                raise ValueError(
+                    "h3_suite: video_source is 'frames' but context_frames is "
+                    "not wired (or its upstream is bypassed). Wire the "
+                    "previous clip's decoded frames, or switch video_source "
+                    "to 'latent' and wire context_latent.")
+            blocks, offsets, span, n = self._pin_from_frames(
+                vae, context_frames, context_length, encode_mode, crop,
+                width, height, frame_count)
 
         if anchor_mode == "before":
             indices = [o - span for o in offsets]

@@ -244,6 +244,64 @@ def main():
     assert abs(ref2[nodes.MC_AUDIO_KEY] - 22.0) < 1e-9
     print("vae path: unchanged, end_frame %.1f" % ref2[nodes.MC_AUDIO_KEY])
 
+    # video_source="latent": pinned video sliced straight from the previous
+    # clip's latent -- phase-aligned tail, no VAE call, content identity
+    captured.clear()
+
+    class ForbiddenVAE:
+        def encode(self, x):
+            raise AssertionError("latent path must not touch the VAE")
+
+    prev_marked = {"samples": Nested([
+        T(np.arange(1 * 16 * latent_t * h * w, dtype=np.float32
+                    ).reshape(1, 16, latent_t, h, w)),
+        prev["samples"].parts[1],
+    ])}
+    out3, trim3 = node.apply(
+        conditioning=[["c", {}]], vae=ForbiddenVAE(), latent=target,
+        context_length=22, encode_mode="video", anchor_mode="head",
+        crop="disabled", audio_context_length=22, audio_mode="timeline",
+        video_source="latent", context_latent=prev_marked)
+    kfs3 = captured["minimax_keyframes"]
+    # latent_t=37, 37%5==2: phase-0 tail runs are 5 (2 steps) and 22 (7
+    # steps). context_length 22 -> slice steps 30..36
+    assert len(kfs3) == 7, len(kfs3)
+    assert [kf[nodes.MC_KEY] for kf in kfs3] == [0, 1, 5, 9, 13, 17, 18]
+    assert trim3 == 22, trim3
+    src = prev_marked["samples"].parts[0]
+    for j, kf in enumerate(kfs3):
+        want = src.a[:, :, 30 + j:31 + j]
+        got = kf["latent"].a
+        assert got.shape == want.shape and np.array_equal(got, want), j
+    print("latent video path: 7 blocks are steps 30..36 of the source "
+          "latent verbatim, offsets phase-aligned, VAE untouched, trim 22")
+
+    # guards: unwired latent, resolution mismatch, no usable run
+    captured.clear()
+    for kwargs, expect in [
+        (dict(video_source="latent"), "context_latent is not wired"),
+        (dict(video_source="latent",
+              context_latent={"samples": Nested([
+                  T(np.zeros((1, 16, latent_t, h, w + 1), np.float32)),
+                  prev["samples"].parts[1]])}),
+         "cannot resize"),
+        (dict(video_source="latent", context_length=1,
+              context_latent=prev_marked), "no phase-aligned tail run"),
+        (dict(video_source="frames"), "context_frames is not wired"),
+    ]:
+        try:
+            node.apply(conditioning=[["c", {}]], vae=ForbiddenVAE(),
+                       latent=target, context_length=kwargs.pop(
+                           "context_length", 22),
+                       encode_mode="video", anchor_mode="head",
+                       crop="disabled", audio_context_length=22,
+                       audio_mode="timeline", **kwargs)
+            raise AssertionError("expected failure: %s" % expect)
+        except ValueError as exc:
+            assert expect in str(exc), (expect, str(exc))
+    print("latent video guards: unwired latent, resolution mismatch, no "
+          "usable run, unwired frames all rejected loudly")
+
     # save -> load -> context_latent roundtrip across "runs"
     import time
     saver = nodes.H3ContextSaveLatent()
