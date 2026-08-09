@@ -58,6 +58,34 @@ const CSS = `
 .h3p-playerempty{color:#5c6472;font-size:12px;text-align:center;line-height:1.7;
   padding:30px;white-space:pre-wrap;}
 .h3p-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.h3p-modes{display:flex;gap:2px;background:#12151b;border:1px solid #2a2f3a;
+  border-radius:7px;padding:2px;}
+.h3p-modes button{background:none;border:0;color:#9aa3b2;padding:4px 12px;
+  border-radius:5px;cursor:pointer;font-size:12px;}
+.h3p-modes button.on{background:#2f3947;color:#fff;}
+.h3p-transport{display:flex;flex-direction:column;gap:5px;}
+.h3p-tbar{display:flex;align-items:center;gap:10px;}
+.h3p-play{background:#12151b;border:1px solid #2a2f3a;color:#d7dbe2;width:30px;
+  height:30px;border-radius:15px;cursor:pointer;font-size:12px;line-height:1;
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+.h3p-play:hover{border-color:#59637a;}
+.h3p-time{font-family:ui-monospace,monospace;font-size:11px;color:#8a93a3;
+  white-space:nowrap;flex:0 0 auto;}
+.h3p-time b{color:#d7dbe2;font-weight:400;}
+.h3p-scrub{position:relative;flex:1;height:26px;cursor:pointer;
+  display:flex;align-items:center;}
+.h3p-track{position:absolute;inset:6px 0;display:flex;gap:2px;}
+.h3p-seg{position:relative;background:#232833;border-radius:3px;overflow:hidden;
+  transition:background .12s;}
+.h3p-seg.approved{background:#2a3a2c;}
+.h3p-seg.pending{background:#3a3120;}
+.h3p-seg.cur{outline:1px solid #59637a;outline-offset:0;}
+.h3p-seg span{position:absolute;left:5px;top:1px;font-size:9px;color:#7d8698;
+  font-family:ui-monospace,monospace;pointer-events:none;}
+.h3p-fill{position:absolute;inset:6px auto 6px 0;background:rgba(111,134,184,.28);
+  border-right:2px solid #8fa8d8;pointer-events:none;border-radius:3px 0 0 3px;}
+.h3p-measuring{font-size:10px;color:#5c6472;}
+
 .h3p-spacer{flex:1;}
 .h3p-confirm{display:none;flex-direction:column;gap:8px;background:#241f14;
   border:1px solid #4a3d20;border-radius:9px;padding:10px 12px;}
@@ -182,9 +210,55 @@ class ProjectModal {
       el("button", { class: "h3p-btn", text: "Cancel",
                      onclick: () => this.nameWrap.classList.remove("on") }));
 
+    this.mode = "timeline";
+    this.curSeg = null;
+    this.durations = {};
+    this.timeline = [];
+    this.total = 0;
+
     this.viewTitle = el("div", { class: "h3p-viewtitle" });
     this.viewSub = el("div", { class: "h3p-viewsub" });
-    this.video = el("video", { controls: "", loop: "" });
+
+    this.btnTimeline = el("button", { text: "Timeline",
+                                      onclick: () => this.setMode("timeline") });
+    this.btnClip = el("button", { text: "Single clip",
+                                  onclick: () => this.setMode("clip") });
+    this.modes = el("div", { class: "h3p-modes" },
+                    this.btnTimeline, this.btnClip);
+
+    this.video = el("video", {});
+    this.video.addEventListener("ended", () => this.onClipEnded());
+    this.video.addEventListener("play", () => this.paintPlayhead());
+    this.video.addEventListener("pause", () => this.paintPlayhead());
+
+    // transport: play/pause, running time, segmented scrub bar
+    this.playBtn = el("button", { class: "h3p-play", text: "\u25b6",
+      onclick: () => {
+        if (this.video.paused) this.video.play().catch(() => {});
+        else this.video.pause();
+      } });
+    this.timeEl = el("div", { class: "h3p-time" });
+    this.track = el("div", { class: "h3p-track" });
+    this.fill = el("div", { class: "h3p-fill" });
+    this.scrub = el("div", { class: "h3p-scrub" }, this.track, this.fill);
+    const scrubTo = (ev) => {
+      const r = this.scrub.getBoundingClientRect();
+      const frac = Math.max(0, Math.min((ev.clientX - r.left) / r.width, 1));
+      this.seekGlobal(frac * this.total, !this.video.paused);
+    };
+    this.scrub.onmousedown = (ev) => {
+      scrubTo(ev);
+      const move = (e2) => scrubTo(e2);
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    };
+    this.transport = el("div", { class: "h3p-transport" },
+      el("div", { class: "h3p-tbar" }, this.playBtn, this.timeEl,
+         this.scrub));
     this.playerEmpty = el("div", { class: "h3p-playerempty" });
     this.player = el("div", { class: "h3p-player" }, this.playerEmpty);
 
@@ -221,8 +295,9 @@ class ProjectModal {
         el("div", { class: "h3p-body" },
           el("div", { class: "h3p-main" },
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
-               this.viewSub),
-            this.player, this.confirm, this.actions),
+               this.viewSub,
+               el("div", { class: "h3p-spacer" }), this.modes),
+            this.player, this.transport, this.confirm, this.actions),
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
             this.railBody)),
@@ -233,6 +308,8 @@ class ProjectModal {
   }
 
   open() {
+    this._sig = null;
+    this.durations = {};
     document.body.append(this.overlay);
     document.addEventListener("keydown", this._esc);
     api.addEventListener("executed", this._onExec);
@@ -240,6 +317,7 @@ class ProjectModal {
   }
 
   close() {
+    if (this._tick) { cancelAnimationFrame(this._tick); this._tick = null; }
     this.video.pause();
     this.overlay.remove();
     document.removeEventListener("keydown", this._esc);
@@ -365,6 +443,147 @@ class ProjectModal {
     this.render();
   }
 
+  /* ---- continuous timeline ------------------------------------- */
+  // The chain plays as one shot by sequencing the individual clip mp4s
+  // through a single <video>: a virtual timeline maps global seconds to
+  // (clip, local offset). Durations come from each file's metadata, so
+  // the bar is proportional once they have all reported in. Switching
+  // files at a boundary costs a frame or two - this is a review tool,
+  // not a finishing monitor. Export master is the seamless artifact.
+
+  measure(clips) {
+    // cache duration per basename; resolve as metadata arrives
+    this.durations = this.durations || {};
+    const name = this.name();
+    const need = clips.filter((c) => !(c.basename in this.durations));
+    if (!need.length) return Promise.resolve();
+    return Promise.all(need.map((c) => new Promise((res) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const done = (d) => {
+        this.durations[c.basename] = d;
+        v.removeAttribute("src");
+        res();
+      };
+      v.onloadedmetadata = () => done(
+        isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
+      v.onerror = () => done(0);
+      v.src = videoURL(name, c.basename);
+    })));
+  }
+
+  buildTimeline(clips) {
+    let t = 0;
+    this.timeline = clips.map((c) => {
+      const dur = this.durations?.[c.basename] || 0;
+      const seg = { clip: c, start: t, dur };
+      t += dur;
+      return seg;
+    });
+    this.total = t;
+    return this.timeline;
+  }
+
+  segAt(globalT) {
+    const tl = this.timeline || [];
+    for (let i = tl.length - 1; i >= 0; i--) {
+      if (globalT >= tl[i].start - 1e-6) return i;
+    }
+    return tl.length ? 0 : -1;
+  }
+
+  globalNow() {
+    const i = this.curSeg;
+    if (i == null || !this.timeline?.[i]) return 0;
+    return this.timeline[i].start + (this.video.currentTime || 0);
+  }
+
+  async seekGlobal(globalT, play) {
+    const tl = this.timeline || [];
+    if (!tl.length) return;
+    const t = Math.max(0, Math.min(globalT, this.total - 0.02));
+    const i = this.segAt(t);
+    const local = t - tl[i].start;
+    if (i !== this.curSeg) {
+      this.curSeg = i;
+      this.video.src = videoURL(this.name(), tl[i].clip.basename);
+      await new Promise((res) => {
+        const go = () => { this.video.onloadedmetadata = null; res(); };
+        this.video.onloadedmetadata = go;
+        setTimeout(go, 4000); // never hang the UI on a bad file
+      });
+      this.paintSegments();
+    }
+    try { this.video.currentTime = local; } catch (e) { /* seeking */ }
+    if (play) this.video.play().catch(() => {});
+    this.paintPlayhead();
+  }
+
+  onClipEnded() {
+    if (this.mode !== "timeline") return;
+    const next = (this.curSeg ?? 0) + 1;
+    if (this.timeline && next < this.timeline.length) {
+      this.seekGlobal(this.timeline[next].start, true);
+    } else {
+      this.paintPlayhead();
+    }
+  }
+
+  paintSegments() {
+    if (!this.track) return;
+    this.track.innerHTML = "";
+    const tl = this.timeline || [];
+    for (let i = 0; i < tl.length; i++) {
+      const seg = tl[i];
+      const share = this.total > 0 ? seg.dur / this.total : 1 / tl.length;
+      const d = el("div", {
+        class: "h3p-seg " + seg.clip.status +
+               (i === this.curSeg ? " cur" : ""),
+        title: `clip ${seg.clip.index} take ${seg.clip.take}` +
+               (seg.dur ? ` \u00b7 ${seg.dur.toFixed(2)}s` : ""),
+      }, el("span", { text: `${seg.clip.index}` }));
+      d.style.flex = `${Math.max(share, 0.02)} 1 0`;
+      this.track.append(d);
+    }
+  }
+
+  paintPlayhead() {
+    if (!this.fill || !this.timeEl) return;
+    const now = this.globalNow();
+    const pct = this.total > 0 ? (now / this.total) * 100 : 0;
+    this.fill.style.width = `${Math.max(0, Math.min(pct, 100))}%`;
+    const fmt = (x) => {
+      const m = Math.floor(x / 60);
+      const sec = (x - m * 60);
+      return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`;
+    };
+    const seg = this.timeline?.[this.curSeg];
+    this.timeEl.innerHTML =
+      `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}` +
+      (seg ? ` \u00b7 clip ${seg.clip.index}` : "");
+    this.playBtn.textContent = this.video.paused ? "\u25b6" : "\u2758\u2758";
+  }
+
+  startTicker() {
+    if (this._tick) return;
+    const step = () => {
+      if (!this.overlay.isConnected) { this._tick = null; return; }
+      if (this.mode === "timeline") this.paintPlayhead();
+      this._tick = requestAnimationFrame(step);
+    };
+    this._tick = requestAnimationFrame(step);
+  }
+
+  setMode(mode) {
+    this.mode = mode;
+    this.viewing = null;
+    this.video.pause();
+    this.curSeg = null;
+    this.video.removeAttribute("src");
+    this.render();
+  }
+
   async refresh(refetch = false) {
     if (refetch) {
       try {
@@ -389,6 +608,7 @@ class ProjectModal {
           `with create_if_missing on`
         : "";
       this.player.replaceChildren(this.playerEmpty);
+      this.transport.style.display = "none";
       this.footText.textContent = "";
       return;
     }
@@ -396,6 +616,92 @@ class ProjectModal {
     const name = this.name();
     const approved = s.clips.filter((c) => c.status === "approved");
     const tail = approved.length ? approved[approved.length - 1] : null;
+
+    this.btnTimeline.className = this.mode === "timeline" ? "on" : "";
+    this.btnClip.className = this.mode === "clip" ? "on" : "";
+
+    // ---- timeline mode: the whole chain as one shot ----
+    if (this.mode === "timeline" && s.clips.length) {
+      this.transport.style.display = "flex";
+      this.player.replaceChildren(this.video);
+      this.video.controls = false;
+      this.video.loop = false;
+
+      const pend = s.pending;
+      this.viewTitle.textContent = pend
+        ? `Chain \u2014 clip ${pend.index} take ${pend.take} pending at ` +
+          `the end`
+        : `Chain \u2014 ${approved.length} approved`;
+      this.viewTitle.className = "h3p-viewtitle " +
+        (pend ? "pending" : "approved");
+      this.viewSub.textContent = pend
+        ? "watch the join, then approve or reject"
+        : "";
+
+      const sig = s.clips.map((c) => c.basename).join("|");
+      if (sig !== this._sig) {
+        this._sig = sig;
+        this.curSeg = null;
+        this.timeEl.innerHTML =
+          "<span class='h3p-measuring'>measuring clips\u2026</span>";
+        this.measure(s.clips).then(() => {
+          if (this._sig !== sig) return;   // state moved on
+          this.buildTimeline(s.clips);
+          this.paintSegments();
+          // land the playhead just before the pending clip so the join
+          // is the first thing you see
+          const jump = pend
+            ? Math.max(0, (this.timeline.find(
+                (x) => x.clip.basename === pend.basename)?.start || 0) - 2)
+            : 0;
+          this.seekGlobal(jump, false);
+          this.startTicker();
+        });
+      } else {
+        this.buildTimeline(s.clips);
+        this.paintSegments();
+        this.paintPlayhead();
+        this.startTicker();
+      }
+
+      if (pend) {
+        this.actions.append(
+          el("button", { class: "h3p-btn",
+                         text: "\u23ee Jump to the join",
+                         onclick: () => {
+                           const seg = this.timeline.find(
+                             (x) => x.clip.basename === pend.basename);
+                           this.seekGlobal(
+                             Math.max(0, (seg?.start || 0) - 2), true);
+                         } }),
+          el("button", { class: "h3p-btn ok",
+                         text: "Approve \u2014 chain from this",
+                         onclick: () => this.act("approve", "approved") }),
+          el("button", { class: "h3p-btn warn", text: "Re-roll",
+                         onclick: () => {
+                           app.queuePrompt(0, 1);
+                           toast("queued \u2014 next render replaces " +
+                                 "this take");
+                         } }),
+          el("button", { class: "h3p-btn bad", text: "Reject",
+                         onclick: () => this.showConfirm(
+                           `Reject clip ${pend.index}? Its files go to ` +
+                           `.trash/ and the chain steps back.`,
+                           () => this.act("reject", "rejected")) }));
+      } else if (tail) {
+        this.actions.append(
+          el("button", { class: "h3p-btn warn",
+                         text: `Reopen clip ${tail.index}\u2026`,
+                         onclick: () => this.reopen(tail.index) }));
+      }
+      this.paintRail(s, name, approved, tail, null);
+      this.paintFoot(approved, tail, name);
+      return;
+    }
+
+    this.transport.style.display = "none";
+    this.video.controls = true;
+    this.video.loop = true;
 
     // player shows: explicit rail selection, else the pending clip,
     // else the chain tail, else the empty message
@@ -454,15 +760,29 @@ class ProjectModal {
         "no clips yet \u2014 queue the workflow and clip 1 lands here " +
         "for review";
       this.player.replaceChildren(this.playerEmpty);
+      this.transport.style.display = "none";
     }
 
-    // chain rail
+    this.paintRail(s, name, approved, tail, shown);
+    this.paintFoot(approved, tail, name);
+  }
+
+  paintRail(s, name, approved, tail, shown) {
+    this.railBody.innerHTML = "";
     for (const c of s.clips) {
       const isTail = tail && c.basename === tail.basename;
       const card = el("div", {
         class: "h3p-clip " + c.status +
           (shown && shown.basename === c.basename ? " sel" : ""),
-        onclick: () => this.view(c.basename),
+        onclick: () => {
+          if (this.mode === "timeline") {
+            const seg = this.timeline?.find(
+              (x) => x.clip.basename === c.basename);
+            if (seg) this.seekGlobal(seg.start, false);
+          } else {
+            this.view(c.basename);
+          }
+        },
       });
       const v = el("video", { muted: "", preload: "metadata" });
       v.src = videoURL(name, c.basename) + "#t=0.1";
@@ -481,12 +801,16 @@ class ProjectModal {
     this.railBody.append(el("div", { class: "h3p-next" },
       el("div", { text: "next queue press renders" }),
       el("b", { text: s.next_save.basename })));
+  }
 
+  paintFoot(approved, tail, name) {
+    const dur = this.total
+      ? ` \u00b7 ${this.total.toFixed(1)}s total` : "";
     this.footText.textContent =
-      `${approved.length} approved \u00b7 ` +
+      `${approved.length} approved${dur} \u00b7 ` +
       (tail ? `chain tails clip ${tail.index}` :
               "chain inactive (fresh clip 1)") +
-      ` \u00b7 project folder: output/h3_projects/${name}`;
+      ` \u00b7 output/h3_projects/${name}`;
   }
 }
 
