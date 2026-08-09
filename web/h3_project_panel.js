@@ -187,47 +187,20 @@ function videoURL(name, basename) {
 }
 
 /* ------------------------------------------------------------------ */
-/* modal                                                               */
+/* ChainTimeline: a scrubbable player over an ordered list of clips     */
 /* ------------------------------------------------------------------ */
+// Both the review modal and the branch modal need the same thing: play a
+// sequence of separate mp4s as one shot, with a segmented scrub bar. The
+// only difference is which clips are in the list, so the machinery lives
+// here and each modal supplies its own segments.
 
-class ProjectModal {
-  constructor(node) {
-    injectCSS();
-    this.node = node;
-    this.state = null;
-    this.viewing = null; // basename explicitly selected in the rail
-
-    this.select = el("select", { class: "h3p-select",
-                                 onchange: () => this.switchProject() });
-    this.nameInput = el("input", { class: "h3p-input",
-                                   placeholder: "new project name" });
-    this.nameInput.onkeydown = (e) => {
-      if (e.key === "Enter") this.createProject();
-      if (e.key === "Escape") this.nameWrap.classList.remove("on");
-      e.stopPropagation();
-    };
-    this.nameWrap = el("div", { class: "h3p-namewrap" },
-      this.nameInput,
-      el("button", { class: "h3p-btn ok", text: "Create",
-                     onclick: () => this.createProject() }),
-      el("button", { class: "h3p-btn", text: "Cancel",
-                     onclick: () => this.nameWrap.classList.remove("on") }));
-
-    this.mode = "timeline";
+class ChainTimeline {
+  initPlayer() {
     this.curSeg = null;
-    this.durations = {};
+    this.standbySeg = null;
+    this.durations = this.durations || {};
     this.timeline = [];
     this.total = 0;
-
-    this.viewTitle = el("div", { class: "h3p-viewtitle" });
-    this.viewSub = el("div", { class: "h3p-viewsub" });
-
-    this.btnTimeline = el("button", { text: "Timeline",
-                                      onclick: () => this.setMode("timeline") });
-    this.btnClip = el("button", { text: "Single clip",
-                                  onclick: () => this.setMode("clip") });
-    this.modes = el("div", { class: "h3p-modes" },
-                    this.btnTimeline, this.btnClip);
 
     // two elements: while one plays, the next clip is already decoded
     // into the other, so a boundary is a swap rather than a load
@@ -276,15 +249,429 @@ class ProjectModal {
     this.transport = el("div", { class: "h3p-transport" },
       el("div", { class: "h3p-tbar" }, this.playBtn, this.timeEl,
          this.scrub));
-    this.playerEmpty = el("div", { class: "h3p-playerempty" });
-    this.player = el("div", { class: "h3p-player" }, this.playerEmpty);
-
     this.confirmMsg = el("div", { class: "msg" });
     this.confirmYes = el("button", { class: "h3p-btn warn", text: "Confirm" });
     this.confirm = el("div", { class: "h3p-confirm" }, this.confirmMsg,
       el("div", { style: "display:flex;gap:8px" }, this.confirmYes,
         el("button", { class: "h3p-btn", text: "Cancel",
                        onclick: () => this.hideConfirm() })));
+
+    this.playerEmpty = el("div", { class: "h3p-playerempty" });
+    this.player = el("div", { class: "h3p-player" }, this.playerEmpty);
+  }
+
+  clipURL(basename) {
+    throw new Error("clipURL must be implemented");
+  }
+
+  showPlayer() {
+    this.player.replaceChildren(this.vA, this.vB);
+    for (const v of [this.vA, this.vB]) { v.controls = false;
+                                          v.loop = false; }
+  }
+
+  stopPlayer() {
+    if (this._tick) { cancelAnimationFrame(this._tick); this._tick = null; }
+    this.vA.pause();
+    this.vB.pause();
+  }
+
+  /* ---- continuous timeline ------------------------------------- */
+  // The chain plays as one shot by sequencing the individual clip mp4s
+  // through a single <video>: a virtual timeline maps global seconds to
+  // (clip, local offset). Durations come from each file's metadata, so
+  // the bar is proportional once they have all reported in. Switching
+  // files at a boundary costs a frame or two - this is a review tool,
+  // not a finishing monitor. Export master is the seamless artifact.
+
+  measure(clips) {
+    // cache duration per basename; resolve as metadata arrives
+    this.durations = this.durations || {};
+    // clips saved with metadata carry their duration in the manifest, so
+    // the timeline builds instantly; only older clips need probing
+    for (const c of clips) {
+      if (!(c.basename in this.durations) && c.meta?.duration > 0) {
+        this.durations[c.basename] = c.meta.duration;
+      }
+    }
+    const need = clips.filter((c) => !(c.basename in this.durations));
+    if (!need.length) return Promise.resolve();
+    return Promise.all(need.map((c) => new Promise((res) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const done = (d) => {
+        this.durations[c.basename] = d;
+        v.removeAttribute("src");
+        res();
+      };
+      v.onloadedmetadata = () => done(
+        isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
+      v.onerror = () => done(0);
+      v.src = this.clipURL(c.basename);
+    })));
+  }
+
+  buildTimeline(clips) {
+    let t = 0;
+    this.timeline = clips.map((c) => {
+      const dur = this.durations?.[c.basename] || 0;
+      const seg = { clip: c, start: t, dur };
+      t += dur;
+      return seg;
+    });
+    this.total = t;
+    return this.timeline;
+  }
+
+  segAt(globalT) {
+    const tl = this.timeline || [];
+    for (let i = tl.length - 1; i >= 0; i--) {
+      if (globalT >= tl[i].start - 1e-6) return i;
+    }
+    return tl.length ? 0 : -1;
+  }
+
+  globalNow() {
+    const i = this.curSeg;
+    if (i == null || !this.timeline?.[i]) return 0;
+    return this.timeline[i].start + (this.video.currentTime || 0);
+  }
+
+  swapBuffers() {
+    const old = this.video;
+    this.video = this.standby;
+    this.standby = old;
+    this.standby.pause();
+    this.standby.style.display = "none";
+    this.video.style.display = "";
+    this.video.muted = false;   // may still be muted from the warm pass
+    this.standbySeg = null;
+  }
+
+  preload(j) {
+    const seg = this.timeline?.[j];
+    if (!seg || this.standbySeg === j) return;
+    const v = this.standby;
+    this.standbySeg = j;
+    v.muted = true;
+    v.src = this.clipURL(seg.clip.basename);
+    // preload="auto" buffers bytes but engines defer decoder init until
+    // play; warm it: one muted frame, pause, rewind. The swap then starts
+    // on a live pipeline instead of paying spin-up at the join.
+    v.onloadeddata = () => {
+      v.onloadeddata = null;
+      if (this.standbySeg !== j) return;
+      v.play().then(() => requestAnimationFrame(() => {
+        if (this.standbySeg !== j) return;
+        v.pause();
+        try { v.currentTime = 0; } catch (e) { /* fine */ }
+        v.muted = false;
+      })).catch(() => { v.muted = false; });
+    };
+  }
+
+  async seekGlobal(globalT, play) {
+    const tl = this.timeline || [];
+    if (!tl.length) return;
+    const t = Math.max(0, Math.min(globalT, this.total - 0.02));
+    const i = this.segAt(t);
+    const local = t - tl[i].start;
+    if (i !== this.curSeg) {
+      if (this.standbySeg === i) {
+        this.swapBuffers();            // already decoded: instant
+      } else {
+        this.video.src = this.clipURL(tl[i].clip.basename);
+        await new Promise((res) => {
+          const go = () => { this.video.onloadedmetadata = null; res(); };
+          this.video.onloadedmetadata = go;
+          setTimeout(go, 4000);        // never hang the UI on a bad file
+        });
+      }
+      this.curSeg = i;
+      this.paintSegments();
+      this.preload(i + 1);
+    }
+    try { this.video.currentTime = local; } catch (e) { /* seeking */ }
+    if (play) this.video.play().catch(() => {});
+    this.paintPlayhead();
+  }
+
+  onClipEnded() {
+    if (this.mode && this.mode !== "timeline") return;
+    const next = (this.curSeg ?? 0) + 1;
+    if (this.timeline && next < this.timeline.length) {
+      this.seekGlobal(this.timeline[next].start, true);
+    } else {
+      this.paintPlayhead();
+    }
+  }
+
+  paintSegments() {
+    if (!this.track) return;
+    this.track.innerHTML = "";
+    const tl = this.timeline || [];
+    for (let i = 0; i < tl.length; i++) {
+      const seg = tl[i];
+      const share = this.total > 0 ? seg.dur / this.total : 1 / tl.length;
+      const d = el("div", {
+        class: "h3p-seg " + seg.clip.status +
+               (i === this.curSeg ? " cur" : ""),
+        title: `clip ${seg.clip.index} take ${seg.clip.take}` +
+               (seg.dur ? ` \u00b7 ${seg.dur.toFixed(2)}s` : ""),
+      }, el("span", { text: `${seg.clip.index}` }));
+      d.style.flex = `${Math.max(share, 0.02)} 1 0`;
+      this.track.append(d);
+    }
+  }
+
+  paintPlayhead() {
+    if (!this.fill || !this.timeEl) return;
+    const now = this.globalNow();
+    const pct = this.total > 0 ? (now / this.total) * 100 : 0;
+    this.fill.style.width = `${Math.max(0, Math.min(pct, 100))}%`;
+    const fmt = (x) => {
+      const m = Math.floor(x / 60);
+      const sec = (x - m * 60);
+      return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`;
+    };
+    const seg = this.timeline?.[this.curSeg];
+    this.timeEl.innerHTML =
+      `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}` +
+      (seg ? ` \u00b7 clip ${seg.clip.index}` : "");
+    this.playBtn.textContent = this.video.paused ? "\u25b6" : "\u2758\u2758";
+  }
+
+  startTicker() {
+    if (this._tick) return;
+    const step = () => {
+      if (!this.overlay.isConnected) { this._tick = null; return; }
+      if (!this.mode || this.mode === "timeline") {
+        this.paintPlayhead();
+      }
+      this._tick = requestAnimationFrame(step);
+    };
+    this._tick = requestAnimationFrame(step);
+  }
+
+}
+
+
+/* ------------------------------------------------------------------ */
+/* branch modal                                                        */
+/* ------------------------------------------------------------------ */
+// Its own surface with its own timeline: the chain AS IT WOULD BE, ending
+// on whichever take you are considering. Switching takes rebuilds only the
+// last segment, so you can watch the new join before committing. The
+// review modal's timeline is left alone.
+
+class BranchModal extends ChainTimeline {
+  constructor(project, index, onDone) {
+    super();
+    injectCSS();
+    this.project = project;
+    this.index = index;
+    this.onDone = onDone;
+    this.initPlayer();
+
+    this.takeSel = el("select", { class: "h3p-select",
+      onchange: () => this.pickTake(Number(this.takeSel.value)) });
+    this.nameInput = el("input", { class: "h3p-input" });
+    this.nameInput.onkeydown = (e) => {
+      if (e.key === "Enter") this.create();
+      if (e.key === "Escape") this.close();
+      e.stopPropagation();
+    };
+    this.note = el("div", { class: "h3p-hint" });
+    this.viewTitle = el("div", { class: "h3p-viewtitle" });
+    this.viewSub = el("div", { class: "h3p-viewsub" });
+    this.createBtn = el("button", { class: "h3p-btn ok",
+      text: "Create branch", onclick: () => this.create() });
+
+    this.overlay = el("div", {
+      class: "h3p-overlay",
+      onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
+    },
+      el("div", { class: "h3p-modal", style: "height:min(720px,88vh)" },
+        el("div", { class: "h3p-head" },
+          el("div", { class: "h3p-title", text: `Branch from clip ${index}` },
+            el("small", { text: project })),
+          el("div", { class: "h3p-spacer" }),
+          el("span", { class: "h3p-takelabel", text: "from take" }),
+          this.takeSel,
+          el("button", { class: "h3p-x", text: "\u2715",
+                         onclick: () => this.close() })),
+        el("div", { class: "h3p-main", style: "padding:14px 16px" },
+          el("div", { class: "h3p-viewhead" }, this.viewTitle, this.viewSub),
+          this.player, this.transport, this.note,
+          el("div", { class: "h3p-actions" },
+            el("span", { class: "h3p-takelabel", text: "branch as" }),
+            this.nameInput, this.createBtn,
+            el("button", { class: "h3p-btn", text: "Cancel",
+                           onclick: () => this.close() }),
+            el("button", { class: "h3p-btn",
+                           text: "\u23ee Jump to the join",
+                           onclick: () => this.jumpToJoin() })))));
+
+    this._esc = (e) => { if (e.key === "Escape") this.close(); };
+  }
+
+  clipURL(basename) {
+    return videoURL(this.project, basename);
+  }
+
+  async open() {
+    document.body.append(this.overlay);
+    document.addEventListener("keydown", this._esc);
+    this.transport.style.display = "flex";
+    this.showPlayer();
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/branch_name?name=` +
+        `${encodeURIComponent(this.project)}&index=${this.index}`);
+      const data = await r.json();
+      if (data.error) throw new Error(data.error);
+      this.nameInput.value = data.suggested;
+      this.takes = data.takes || [];
+      this.approvedTake = data.current_take;
+      this.takeSel.innerHTML = "";
+      for (const t of this.takes) {
+        const secs = t.meta?.duration ? ` \u00b7 ${t.meta.duration}s` : "";
+        this.takeSel.append(el("option", {
+          value: String(t.take),
+          text: `take ${t.take}${secs}` +
+                (t.take === data.current_take ? " (approved)" : "") +
+                (t.location === "trash" ? " \u00b7 recovered" : ""),
+        }));
+      }
+      this.takeSel.value = String(data.current_take);
+      const sr = await api.fetchApi(
+        `/h3_suite/project/state?name=` +
+        `${encodeURIComponent(this.project)}`);
+      this.state = await sr.json();
+      this.pickTake(data.current_take);
+    } catch (e) {
+      toast(e.message, true);
+      this.close();
+    }
+  }
+
+  close() {
+    this.stopPlayer();
+    this.overlay.remove();
+    document.removeEventListener("keydown", this._esc);
+  }
+
+  async pickTake(take) {
+    const chosen = (this.takes || []).find((t) => t.take === take);
+    if (!chosen || !this.state) return;
+    this.chosen = chosen;
+    // the branch's chain: clips 1..index-1 as selected, then this take
+    const clips = this.state.clips.slice(0, this.index - 1).map((c) => ({
+      index: c.index, take: c.take, basename: c.basename,
+      status: "approved", meta: c.meta,
+    }));
+    clips.push({ index: this.index, take: chosen.take,
+                 basename: chosen.basename, status: "approved",
+                 meta: chosen.meta });
+    this.curSeg = null;
+    this.standbySeg = null;
+    this.viewTitle.textContent =
+      `Branch chain \u2014 ${clips.length} clips, ending on take ` +
+      `${chosen.take}`;
+    this.viewTitle.className = "h3p-viewtitle approved";
+    this.viewSub.textContent = chosen.location === "trash"
+      ? "this take is in .trash/ and would be recovered into the branch"
+      : "";
+    const total = this.state.clips.length;
+    const swapped = chosen.take !== this.approvedTake;
+    this.note.textContent =
+      `copies clips 1\u2013${this.index} into a new project` +
+      (swapped ? `, using take ${chosen.take} of clip ${this.index} as the ` +
+                 `tail instead of the approved take ${this.approvedTake}` : "") +
+      `. ` + (total > this.index
+        ? `Clips ${this.index + 1}\u2013${total} stay in ${this.project}, ` +
+          `untouched.`
+        : `${this.project} is untouched.`);
+    this.timeEl.innerHTML =
+      "<span class='h3p-measuring'>measuring clips\u2026</span>";
+    await this.measure(clips);
+    this.buildTimeline(clips);
+    this.paintSegments();
+    this.jumpToJoin();
+    this.startTicker();
+  }
+
+  jumpToJoin() {
+    const last = this.timeline?.[this.timeline.length - 1];
+    if (!last) return;
+    this.seekGlobal(Math.max(0, last.start - 2), true);
+  }
+
+  async create() {
+    const newName = this.nameInput.value.trim();
+    if (!newName || !this.chosen) return;
+    this.createBtn.disabled = true;
+    toast("copying clips\u2026");
+    try {
+      await post("/h3_suite/project/branch", {
+        name: this.project, index: this.index, new_name: newName,
+        take: this.chosen.take,
+      });
+      toast(`branched into "${newName}" at clip ${this.index}`);
+      this.close();
+      this.onDone?.(newName);
+    } catch (e) {
+      this.createBtn.disabled = false;
+      toast(e.message, true);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* review modal                                                        */
+/* ------------------------------------------------------------------ */
+
+class ProjectModal extends ChainTimeline {
+  constructor(node) {
+    super();
+    injectCSS();
+    this.initPlayer();
+    this.node = node;
+    this.state = null;
+    this.viewing = null; // basename explicitly selected in the rail
+
+    this.select = el("select", { class: "h3p-select",
+                                 onchange: () => this.switchProject() });
+    this.nameInput = el("input", { class: "h3p-input",
+                                   placeholder: "new project name" });
+    this.nameInput.onkeydown = (e) => {
+      if (e.key === "Enter") this.createProject();
+      if (e.key === "Escape") this.nameWrap.classList.remove("on");
+      e.stopPropagation();
+    };
+    this.nameWrap = el("div", { class: "h3p-namewrap" },
+      this.nameInput,
+      el("button", { class: "h3p-btn ok", text: "Create",
+                     onclick: () => this.createProject() }),
+      el("button", { class: "h3p-btn", text: "Cancel",
+                     onclick: () => this.nameWrap.classList.remove("on") }));
+
+    this.mode = "timeline";
+    this.curSeg = null;
+    this.durations = {};
+    this.timeline = [];
+    this.total = 0;
+
+    this.viewTitle = el("div", { class: "h3p-viewtitle" });
+    this.viewSub = el("div", { class: "h3p-viewsub" });
+
+    this.btnTimeline = el("button", { text: "Timeline",
+                                      onclick: () => this.setMode("timeline") });
+    this.btnClip = el("button", { text: "Single clip",
+                                  onclick: () => this.setMode("clip") });
+    this.modes = el("div", { class: "h3p-modes" },
+                    this.btnTimeline, this.btnClip);
 
     this.takeSel = el("select", { class: "h3p-select",
       onchange: () => this.selectTake(this.takeSel.value) });
@@ -297,27 +684,6 @@ class ProjectModal {
       if (e.key === "Escape") this.exportRow.classList.remove("on");
       e.stopPropagation();
     };
-    this.branchInput = el("input", { class: "h3p-input" });
-    this.branchInput.onkeydown = (e) => {
-      if (e.key === "Enter") this.doBranch();
-      if (e.key === "Escape") this.branchRow.classList.remove("on");
-      e.stopPropagation();
-    };
-    this.branchNote = el("span", { class: "h3p-hint" });
-    this.branchTake = el("select", { class: "h3p-select",
-      onchange: () => this.updateBranchNote() });
-    this.branchTakeWrap = el("div", { class: "h3p-takes" },
-      el("span", { class: "h3p-takelabel", text: "from take" }),
-      this.branchTake);
-    this.branchRow = el("div", { class: "h3p-namewrap" },
-      el("span", { class: "h3p-takelabel", text: "branch as" }),
-      this.branchInput, this.branchTakeWrap,
-      el("button", { class: "h3p-btn ok", text: "Create branch",
-                     onclick: () => this.doBranch() }),
-      el("button", { class: "h3p-btn", text: "Cancel",
-                     onclick: () => this.branchRow.classList.remove("on") }),
-      this.branchNote);
-
     this.exportRow = el("div", { class: "h3p-namewrap" },
       el("span", { class: "h3p-takelabel", text: "save as" }),
       this.exportInput,
@@ -363,7 +729,7 @@ class ProjectModal {
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
                this.viewSub,
                el("div", { class: "h3p-spacer" }), this.modes),
-            this.player, this.transport, this.exportRow, this.branchRow,
+            this.player, this.transport, this.exportRow,
             this.confirm, this.actions),
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
@@ -384,9 +750,7 @@ class ProjectModal {
   }
 
   close() {
-    if (this._tick) { cancelAnimationFrame(this._tick); this._tick = null; }
-    this.vA.pause();
-    this.vB.pause();
+    this.stopPlayer();
     this.overlay.remove();
     document.removeEventListener("keydown", this._esc);
     api.removeEventListener("executed", this._onExec);
@@ -396,6 +760,10 @@ class ProjectModal {
   name() {
     return this.node.widgets?.find((w) => w.name === "project_name")
       ?.value || "";
+  }
+
+  clipURL(basename) {
+    return videoURL(this.name(), basename);
   }
 
   setName(v) {
@@ -490,75 +858,19 @@ class ProjectModal {
       .catch((e) => toast(e.message, true));
   }
 
-  async branchFrom(index) {
-    this._branchIndex = index;
-    try {
-      const r = await api.fetchApi(
-        `/h3_suite/project/branch_name?name=` +
-        `${encodeURIComponent(this.name())}&index=${index}`);
-      const data = await r.json();
-      if (data.error) throw new Error(data.error);
-      this.branchInput.value = data.suggested;
-      const takes = data.takes || [];
-      this.branchTake.innerHTML = "";
-      for (const t of takes) {
-        const secs = t.meta?.duration ? ` \u00b7 ${t.meta.duration}s` : "";
-        const where = t.location === "trash" ? " \u00b7 from trash" : "";
-        this.branchTake.append(el("option", {
-          value: String(t.take),
-          text: `take ${t.take}${secs}${where}` +
-                (t.take === data.current_take ? " (approved)" : ""),
-        }));
-      }
-      this.branchTake.value = String(data.current_take);
-      // a clip with one surviving take needs no chooser
-      this.branchTakeWrap.style.display = takes.length > 1 ? "flex" : "none";
-      this._branchApproved = data.current_take;
-    } catch (e) {
-      this.branchInput.value = `${this.name()}_from${index}`;
-      this.branchTakeWrap.style.display = "none";
-      this._branchApproved = null;
-    }
-    this.updateBranchNote();
-    this.branchRow.classList.add("on");
-    this.branchInput.focus();
-    this.branchInput.select();
-  }
-
-  updateBranchNote() {
-    const index = this._branchIndex;
-    const n = this.state?.clips?.length || 0;
-    const chosen = Number(this.branchTake.value);
-    const swapped = this._branchApproved != null &&
-                    chosen !== this._branchApproved;
-    this.branchNote.textContent =
-      `copies clips 1\u2013${index} into a new project` +
-      (swapped ? `, using take ${chosen} of clip ${index} as the new tail ` +
-                 `instead of the approved take ${this._branchApproved}` : "") +
-      `; ` + (n > index ? `clips ${index + 1}\u2013${n} stay here untouched`
-                        : "this project is untouched");
-  }
-
-  async doBranch() {
-    const newName = this.branchInput.value.trim();
-    if (!newName) return;
-    this.branchRow.classList.remove("on");
-    toast("copying clips\u2026");
-    try {
-      const out = await post("/h3_suite/project/branch", {
-        name: this.name(), index: this._branchIndex, new_name: newName,
-        take: this.branchTakeWrap.style.display === "none"
-          ? null : Number(this.branchTake.value),
-      });
-      toast(`branched into "${newName}" at clip ${this._branchIndex}`);
+  branchFrom(index) {
+    const modal = new BranchModal(this.name(), index, (newName) => {
+      // land in the branch: it is the thing you now want to work on
       this.setName(newName);
       this.viewing = null;
       this._sig = null;
       this.durations = {};
-      await this.loadProjects();
-      this.select.value = newName;
-      this.refresh(true);
-    } catch (e) { toast(e.message, true); }
+      this.loadProjects().then(() => {
+        this.select.value = newName;
+        this.refresh(true);
+      });
+    });
+    modal.open();
   }
 
   async selectTake(take) {
@@ -642,183 +954,6 @@ class ProjectModal {
     this.render();
   }
 
-  /* ---- continuous timeline ------------------------------------- */
-  // The chain plays as one shot by sequencing the individual clip mp4s
-  // through a single <video>: a virtual timeline maps global seconds to
-  // (clip, local offset). Durations come from each file's metadata, so
-  // the bar is proportional once they have all reported in. Switching
-  // files at a boundary costs a frame or two - this is a review tool,
-  // not a finishing monitor. Export master is the seamless artifact.
-
-  measure(clips) {
-    // cache duration per basename; resolve as metadata arrives
-    this.durations = this.durations || {};
-    const name = this.name();
-    // clips saved with metadata carry their duration in the manifest, so
-    // the timeline builds instantly; only older clips need probing
-    for (const c of clips) {
-      if (!(c.basename in this.durations) && c.meta?.duration > 0) {
-        this.durations[c.basename] = c.meta.duration;
-      }
-    }
-    const need = clips.filter((c) => !(c.basename in this.durations));
-    if (!need.length) return Promise.resolve();
-    return Promise.all(need.map((c) => new Promise((res) => {
-      const v = document.createElement("video");
-      v.preload = "metadata";
-      v.muted = true;
-      const done = (d) => {
-        this.durations[c.basename] = d;
-        v.removeAttribute("src");
-        res();
-      };
-      v.onloadedmetadata = () => done(
-        isFinite(v.duration) && v.duration > 0 ? v.duration : 0);
-      v.onerror = () => done(0);
-      v.src = videoURL(name, c.basename);
-    })));
-  }
-
-  buildTimeline(clips) {
-    let t = 0;
-    this.timeline = clips.map((c) => {
-      const dur = this.durations?.[c.basename] || 0;
-      const seg = { clip: c, start: t, dur };
-      t += dur;
-      return seg;
-    });
-    this.total = t;
-    return this.timeline;
-  }
-
-  segAt(globalT) {
-    const tl = this.timeline || [];
-    for (let i = tl.length - 1; i >= 0; i--) {
-      if (globalT >= tl[i].start - 1e-6) return i;
-    }
-    return tl.length ? 0 : -1;
-  }
-
-  globalNow() {
-    const i = this.curSeg;
-    if (i == null || !this.timeline?.[i]) return 0;
-    return this.timeline[i].start + (this.video.currentTime || 0);
-  }
-
-  swapBuffers() {
-    const old = this.video;
-    this.video = this.standby;
-    this.standby = old;
-    this.standby.pause();
-    this.standby.style.display = "none";
-    this.video.style.display = "";
-    this.video.muted = false;   // may still be muted from the warm pass
-    this.standbySeg = null;
-  }
-
-  preload(j) {
-    const seg = this.timeline?.[j];
-    if (!seg || this.standbySeg === j) return;
-    const v = this.standby;
-    this.standbySeg = j;
-    v.muted = true;
-    v.src = videoURL(this.name(), seg.clip.basename);
-    // preload="auto" buffers bytes but engines defer decoder init until
-    // play; warm it: one muted frame, pause, rewind. The swap then starts
-    // on a live pipeline instead of paying spin-up at the join.
-    v.onloadeddata = () => {
-      v.onloadeddata = null;
-      if (this.standbySeg !== j) return;
-      v.play().then(() => requestAnimationFrame(() => {
-        if (this.standbySeg !== j) return;
-        v.pause();
-        try { v.currentTime = 0; } catch (e) { /* fine */ }
-        v.muted = false;
-      })).catch(() => { v.muted = false; });
-    };
-  }
-
-  async seekGlobal(globalT, play) {
-    const tl = this.timeline || [];
-    if (!tl.length) return;
-    const t = Math.max(0, Math.min(globalT, this.total - 0.02));
-    const i = this.segAt(t);
-    const local = t - tl[i].start;
-    if (i !== this.curSeg) {
-      if (this.standbySeg === i) {
-        this.swapBuffers();            // already decoded: instant
-      } else {
-        this.video.src = videoURL(this.name(), tl[i].clip.basename);
-        await new Promise((res) => {
-          const go = () => { this.video.onloadedmetadata = null; res(); };
-          this.video.onloadedmetadata = go;
-          setTimeout(go, 4000);        // never hang the UI on a bad file
-        });
-      }
-      this.curSeg = i;
-      this.paintSegments();
-      this.preload(i + 1);
-    }
-    try { this.video.currentTime = local; } catch (e) { /* seeking */ }
-    if (play) this.video.play().catch(() => {});
-    this.paintPlayhead();
-  }
-
-  onClipEnded() {
-    if (this.mode !== "timeline") return;
-    const next = (this.curSeg ?? 0) + 1;
-    if (this.timeline && next < this.timeline.length) {
-      this.seekGlobal(this.timeline[next].start, true);
-    } else {
-      this.paintPlayhead();
-    }
-  }
-
-  paintSegments() {
-    if (!this.track) return;
-    this.track.innerHTML = "";
-    const tl = this.timeline || [];
-    for (let i = 0; i < tl.length; i++) {
-      const seg = tl[i];
-      const share = this.total > 0 ? seg.dur / this.total : 1 / tl.length;
-      const d = el("div", {
-        class: "h3p-seg " + seg.clip.status +
-               (i === this.curSeg ? " cur" : ""),
-        title: `clip ${seg.clip.index} take ${seg.clip.take}` +
-               (seg.dur ? ` \u00b7 ${seg.dur.toFixed(2)}s` : ""),
-      }, el("span", { text: `${seg.clip.index}` }));
-      d.style.flex = `${Math.max(share, 0.02)} 1 0`;
-      this.track.append(d);
-    }
-  }
-
-  paintPlayhead() {
-    if (!this.fill || !this.timeEl) return;
-    const now = this.globalNow();
-    const pct = this.total > 0 ? (now / this.total) * 100 : 0;
-    this.fill.style.width = `${Math.max(0, Math.min(pct, 100))}%`;
-    const fmt = (x) => {
-      const m = Math.floor(x / 60);
-      const sec = (x - m * 60);
-      return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`;
-    };
-    const seg = this.timeline?.[this.curSeg];
-    this.timeEl.innerHTML =
-      `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}` +
-      (seg ? ` \u00b7 clip ${seg.clip.index}` : "");
-    this.playBtn.textContent = this.video.paused ? "\u25b6" : "\u2758\u2758";
-  }
-
-  startTicker() {
-    if (this._tick) return;
-    const step = () => {
-      if (!this.overlay.isConnected) { this._tick = null; return; }
-      if (this.mode === "timeline") this.paintPlayhead();
-      this._tick = requestAnimationFrame(step);
-    };
-    this._tick = requestAnimationFrame(step);
-  }
-
   setMode(mode) {
     this.mode = mode;
     this.viewing = null;
@@ -870,9 +1005,7 @@ class ProjectModal {
     // ---- timeline mode: the whole chain as one shot ----
     if (this.mode === "timeline" && s.clips.length) {
       this.transport.style.display = "flex";
-      this.player.replaceChildren(this.vA, this.vB);
-      for (const v of [this.vA, this.vB]) { v.controls = false;
-                                            v.loop = false; }
+      this.showPlayer();
 
       const pend = s.pending;
       const shownSeg = this.timeline?.[this.curSeg] || null;

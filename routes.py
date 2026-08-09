@@ -292,10 +292,16 @@ def _register():
         except ProjectError as exc:
             return web.json_response({"error": str(exc)}, status=404)
         basename = request.rel_url.query.get("basename", "")
-        path = p.clip_video_path(basename)
-        # containment before serving: the basename came off the wire
-        real = os.path.realpath(path)
-        root = os.path.realpath(p.clips_dir)
+        # a take may live in clips/ or, once superseded, in .trash/ - the
+        # branch preview has to be able to watch either
+        try:
+            where = p.locate_pair(basename)
+        except ProjectError:
+            return web.json_response({"error": "no such clip"}, status=404)
+        if where is None:
+            return web.json_response({"error": "no such clip"}, status=404)
+        real = os.path.realpath(os.path.join(where, basename + ".mp4"))
+        root = os.path.realpath(p.root)
         if os.path.commonpath([real, root]) != root or not os.path.isfile(
                 real):
             return web.json_response({"error": "no such clip"}, status=404)
