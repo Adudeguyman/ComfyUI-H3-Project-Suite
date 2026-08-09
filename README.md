@@ -2,19 +2,19 @@
 
 **Make long videos with MiniMax H3, one clip at a time, without the joins falling apart.**
 
-H3 makes great five-to-fifteen second clips. Stringing them into something longer is where it gets painful: the usual trick is to take the last frame of one clip and use it as the first frame of the next, which throws away everything except a single still. Motion stops and restarts. The soundtrack cuts out and something vaguely similar starts up. Colours drift a little further with every join.
+H3 makes great five-to-fifteen second clips. Stringing them into something longer is where it gets painful: the usual trick is to take the last frame of one clip and use it as the first frame of the next, which throws away everything except a single still. Motion stops and restarts. The soundtrack cuts out and something vaguely similar starts up. And because every join converts the video back and forth, colours shift a little further each time.
 
 This suite fixes that, then wraps a project manager around it so you aren't hand-managing files between every clip.
 
-The short version of how: each clip is handed to the next one in the model's own internal format rather than as pictures and sound. Nothing is decoded, re-compressed or converted in between, so nothing degrades along the way — the tenth join looks and sounds as clean as the first. You never have to think about this. It's just the default.
+The short version of how: each clip is handed to the next one in the model's own internal format rather than as pictures and sound. Nothing gets decoded, re-compressed or converted in between, which removes the biggest source of the drift — so quality holds up far better down a long chain than the last-frame approach. It isn't magic and the model still does what the model does, but you should be able to go a lot further before a chain starts looking tired. You never have to think about this; it's just the default.
 
 ---
 
 ## What you get
 
-**Clips that actually continue.** Motion keeps its direction and speed through a join. Sound genuinely continues — the same music playing on, the same voice mid-sentence — instead of a soundalike starting over.
+**Clips that continue instead of restarting.** The next clip is handed roughly a second of what came before rather than one frozen frame, so motion carries its direction and speed through a join, and sound carries on — the same music playing through, the same voice mid-sentence — rather than a soundalike starting up. How well any individual join lands still depends on your prompt and the model's mood, but it has something real to continue from.
 
-**No colour drift.** Colours stay put no matter how long the chain gets.
+**Minimal quality loss between clips.** The compounding colour shift you get from converting back and forth at every join is gone, so longer chains stay closer to how they started. Some variation between clips is normal — this is a generative model — but it shouldn't stack up on you.
 
 **References that survive.** If you're using Ref2VA with a voice reference and character images, they keep working on every clip, not just the first one.
 
