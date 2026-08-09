@@ -237,6 +237,27 @@ def main():
     print("14. branched on clip 2 take 2 (never approved, sitting in "
           "trash); source still on take 3")
 
+    # a trash-recovered take must become a LIVE clip in the branch, not
+    # arrive still-trashed and vanish on the next purge
+    for ext in (".mp4", ".safetensors"):
+        assert os.path.isfile(os.path.join(alt.clips_dir,
+                                           "clip_002_take2" + ext))
+    assert not os.path.exists(alt.trash_dir), "branch created a .trash/"
+    e2 = alt._entry(2)
+    assert e2["status"] == "approved" and e2["take"] == 2
+    assert all(not t.get("trashed") for t in e2["takes"]), e2["takes"]
+    assert {t["location"] for t in alt.available_takes(2)} == {"clips"}
+    alt.purge_trash()
+    Project(out, "Takes").purge_trash()          # source purge too
+    assert os.path.isfile(os.path.join(alt.clips_dir,
+                                       "clip_002_take2.mp4"))
+    with open(os.path.join(alt.clips_dir, "clip_002_take2.mp4"),
+              "rb") as fh:
+        assert fh.read() == bytes([2]) * 64      # content intact
+    assert alt.tail_latent_path().endswith("clip_002_take2.safetensors")
+    print("15. recovered take lives in clips/ as approved; neither purge "
+          "can reach it")
+
     print("all checks passed")
 
 
