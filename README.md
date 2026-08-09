@@ -2,11 +2,11 @@
 
 **Make long videos with MiniMax H3, one clip at a time, without the joins falling apart.**
 
-H3 makes great five-to-fifteen second clips. Stringing them into something longer is where it gets painful: the usual trick is to take the last frame of one clip and use it as the first frame of the next, which throws away everything except a single still. Motion stops and restarts. The soundtrack cuts out and something vaguely similar starts up. And because every join converts the video back and forth, colours shift a little further each time.
+H3 makes great five-to-fifteen second clips. Stringing them into something longer is where it gets painful: the usual trick is to take the last frame of one clip and use it as the first frame of the next, which throws away everything except a single still. Motion stops and restarts. The soundtrack cuts out and something vaguely similar starts up. And because every join converts the video out of the model's format and back in again, each one costs a little quality that the next join then builds on.
 
 This suite fixes that, then wraps a project manager around it so you aren't hand-managing files between every clip.
 
-The short version of how: each clip is handed to the next one in the model's own internal format rather than as pictures and sound. Nothing gets decoded, re-compressed or converted in between, which removes the biggest source of the drift — so quality holds up far better down a long chain than the last-frame approach. It isn't magic and the model still does what the model does, but you should be able to go a lot further before a chain starts looking tired. You never have to think about this; it's just the default.
+The short version of how: in its default *latent* mode, each clip is handed to the next one in the model's own internal format rather than as pictures and sound. There's no decoding between clips, so the handoff doesn't cost you a conversion the way traditional extension methods do. It isn't magic — the model still does what the model does — but the quality loss that comes from the plumbing is largely removed, which should let you go further before a chain starts looking tired. You never have to think about this; it's just the default.
 
 ---
 
@@ -14,7 +14,7 @@ The short version of how: each clip is handed to the next one in the model's own
 
 **Clips that continue instead of restarting.** The next clip is handed roughly a second of what came before rather than one frozen frame, so motion carries its direction and speed through a join, and sound carries on — the same music playing through, the same voice mid-sentence — rather than a soundalike starting up. How well any individual join lands still depends on your prompt and the model's mood, but it has something real to continue from.
 
-**Minimal quality loss between clips.** The compounding colour shift you get from converting back and forth at every join is gone, so longer chains stay closer to how they started. Some variation between clips is normal — this is a generative model — but it shouldn't stack up on you.
+**Minimal quality loss between clips.** In latent mode there's no decoding between clips — the handoff never leaves the model's own format — so there's less quality loss than with traditional extension methods, where every join costs another conversion. Some variation between clips is still normal; this is a generative model. But the losses that come from the plumbing rather than the model are largely off the table.
 
 **References that survive.** If you're using Ref2VA with a voice reference and character images, they keep working on every clip, not just the first one.
 
@@ -123,7 +123,7 @@ Almost everything can be left alone. Three are worth understanding:
 
 **Context length (22)** — how much of the previous clip gets handed over. Bigger means a smoother join but less freedom for the new clip to do something different. 22 frames (just under a second) is a good default. The values that work are 5, 22 and 39.
 
-**Video source (latent)** — leave this on `latent`. That's the mode that avoids the quality loss described at the top. `frames` is the older way, kept for compatibility.
+**Video source (latent)** — leave this on `latent`. That's the mode that skips the decoding step between clips, as described at the top. `frames` is the older way of doing it, kept for compatibility with hand-built graphs.
 
 **fps (24)** — must match your video's frame rate. H3 runs at 24, so leave it unless you know you've changed something.
 
