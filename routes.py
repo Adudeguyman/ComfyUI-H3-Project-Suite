@@ -126,9 +126,15 @@ def _register():
         import subprocess
         import folder_paths as fp
         p = Project(fp.get_output_directory(), body.get("name"))
-        clips = p.approved()
+        clips = list(p.approved())
+        # a pending clip can be appended for a seamless preview of the
+        # join you are about to judge; the file is named _preview so it
+        # can never be mistaken for the deliverable master
+        preview = bool(body.get("include_pending")) and p.pending()
+        if preview:
+            clips.append(p.pending())
         if not clips:
-            raise ProjectError("h3_suite: nothing approved to export.")
+            raise ProjectError("h3_suite: nothing to export.")
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             raise ProjectError("h3_suite: ffmpeg not found on PATH; "
@@ -136,7 +142,7 @@ def _register():
         missing = [c["basename"] for c in clips
                    if not os.path.isfile(p.clip_video_path(c["basename"]))]
         if missing:
-            raise ProjectError("h3_suite: approved clip videos missing: %s"
+            raise ProjectError("h3_suite: clip videos missing: %s"
                                % ", ".join(missing))
         list_path = os.path.join(p.root, ".concat.txt")
         with open(list_path, "w", encoding="utf-8") as fh:
@@ -144,7 +150,9 @@ def _register():
                 fh.write("file '%s'\n"
                          % p.clip_video_path(c["basename"]).replace("'",
                                                                     "'\\''"))
-        master = os.path.join(p.root, "%s_master.mp4" % p.name)
+        master = os.path.join(
+            p.root, "%s%s.mp4" % (p.name, "_preview" if preview
+                                  else "_master"))
         # identical-format clips by construction: stream copy, no re-encode
         proc = subprocess.run(
             [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
@@ -156,6 +164,8 @@ def _register():
                                % proc.stderr[-400:])
         out = _state(p)
         out["master"] = master
+        out["preview"] = bool(preview)
+        out["clip_count"] = len(clips)
         return out
 
     @routes.get("/h3_suite/project/video")

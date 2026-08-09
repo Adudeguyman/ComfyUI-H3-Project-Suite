@@ -85,6 +85,7 @@ const CSS = `
 .h3p-fill{position:absolute;inset:6px auto 6px 0;background:rgba(111,134,184,.28);
   border-right:2px solid #8fa8d8;pointer-events:none;border-radius:3px 0 0 3px;}
 .h3p-measuring{font-size:10px;color:#5c6472;}
+.h3p-hint{font-size:11px;color:#6b7484;line-height:1.4;}
 
 .h3p-spacer{flex:1;}
 .h3p-confirm{display:none;flex-direction:column;gap:8px;background:#241f14;
@@ -226,10 +227,24 @@ class ProjectModal {
     this.modes = el("div", { class: "h3p-modes" },
                     this.btnTimeline, this.btnClip);
 
-    this.video = el("video", {});
-    this.video.addEventListener("ended", () => this.onClipEnded());
-    this.video.addEventListener("play", () => this.paintPlayhead());
-    this.video.addEventListener("pause", () => this.paintPlayhead());
+    // two elements: while one plays, the next clip is already decoded
+    // into the other, so a boundary is a swap rather than a load
+    const mkVideo = () => {
+      const v = el("video", {});
+      v.preload = "auto";
+      v.addEventListener("ended", () => {
+        if (v === this.video) this.onClipEnded();
+      });
+      v.addEventListener("play", () => this.paintPlayhead());
+      v.addEventListener("pause", () => this.paintPlayhead());
+      return v;
+    };
+    this.vA = mkVideo();
+    this.vB = mkVideo();
+    this.vB.style.display = "none";
+    this.video = this.vA;
+    this.standby = this.vB;
+    this.standbySeg = null;
 
     // transport: play/pause, running time, segmented scrub bar
     this.playBtn = el("button", { class: "h3p-play", text: "\u25b6",
@@ -287,7 +302,13 @@ class ProjectModal {
           this.nameWrap,
           el("div", { class: "h3p-spacer" }),
           el("button", { class: "h3p-btn", text: "Export master",
-                         onclick: () => this.exportMaster() }),
+                         onclick: () => this.exportMaster(false) }),
+          el("button", { class: "h3p-btn",
+                         text: "Export + pending",
+                         title: "seamless concat including the clip " +
+                                "awaiting review \u2014 judge the join " +
+                                "without the player's boundary stutter",
+                         onclick: () => this.exportMaster(true) }),
           el("button", { class: "h3p-btn", text: "Purge trash",
                          onclick: () => this.purge() }),
           el("button", { class: "h3p-x", text: "\u2715",
@@ -318,7 +339,8 @@ class ProjectModal {
 
   close() {
     if (this._tick) { cancelAnimationFrame(this._tick); this._tick = null; }
-    this.video.pause();
+    this.vA.pause();
+    this.vB.pause();
     this.overlay.remove();
     document.removeEventListener("keydown", this._esc);
     api.removeEventListener("executed", this._onExec);
@@ -422,11 +444,12 @@ class ProjectModal {
       .catch((e) => toast(e.message, true));
   }
 
-  async exportMaster() {
+  async exportMaster(includePending) {
     try {
       const out = await post("/h3_suite/project/export",
-                             { name: this.name() });
-      toast(`master written: ${out.master}`);
+        { name: this.name(), include_pending: !!includePending });
+      toast(`${out.preview ? "preview" : "master"} written ` +
+            `(${out.clip_count} clips): ${out.master}`);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -499,6 +522,24 @@ class ProjectModal {
     return this.timeline[i].start + (this.video.currentTime || 0);
   }
 
+  swapBuffers() {
+    const old = this.video;
+    this.video = this.standby;
+    this.standby = old;
+    this.standby.pause();
+    this.standby.style.display = "none";
+    this.video.style.display = "";
+    this.standbySeg = null;
+  }
+
+  preload(j) {
+    const seg = this.timeline?.[j];
+    if (!seg || this.standbySeg === j) return;
+    this.standby.src = videoURL(this.name(), seg.clip.basename);
+    this.standby.currentTime = 0;
+    this.standbySeg = j;
+  }
+
   async seekGlobal(globalT, play) {
     const tl = this.timeline || [];
     if (!tl.length) return;
@@ -506,14 +547,19 @@ class ProjectModal {
     const i = this.segAt(t);
     const local = t - tl[i].start;
     if (i !== this.curSeg) {
+      if (this.standbySeg === i) {
+        this.swapBuffers();            // already decoded: instant
+      } else {
+        this.video.src = videoURL(this.name(), tl[i].clip.basename);
+        await new Promise((res) => {
+          const go = () => { this.video.onloadedmetadata = null; res(); };
+          this.video.onloadedmetadata = go;
+          setTimeout(go, 4000);        // never hang the UI on a bad file
+        });
+      }
       this.curSeg = i;
-      this.video.src = videoURL(this.name(), tl[i].clip.basename);
-      await new Promise((res) => {
-        const go = () => { this.video.onloadedmetadata = null; res(); };
-        this.video.onloadedmetadata = go;
-        setTimeout(go, 4000); // never hang the UI on a bad file
-      });
       this.paintSegments();
+      this.preload(i + 1);
     }
     try { this.video.currentTime = local; } catch (e) { /* seeking */ }
     if (play) this.video.play().catch(() => {});
@@ -578,9 +624,12 @@ class ProjectModal {
   setMode(mode) {
     this.mode = mode;
     this.viewing = null;
-    this.video.pause();
     this.curSeg = null;
-    this.video.removeAttribute("src");
+    this.standbySeg = null;
+    for (const v of [this.vA, this.vB]) {
+      v.pause();
+      v.removeAttribute("src");
+    }
     this.render();
   }
 
@@ -623,9 +672,9 @@ class ProjectModal {
     // ---- timeline mode: the whole chain as one shot ----
     if (this.mode === "timeline" && s.clips.length) {
       this.transport.style.display = "flex";
-      this.player.replaceChildren(this.video);
-      this.video.controls = false;
-      this.video.loop = false;
+      this.player.replaceChildren(this.vA, this.vB);
+      for (const v of [this.vA, this.vB]) { v.controls = false;
+                                            v.loop = false; }
 
       const pend = s.pending;
       this.viewTitle.textContent = pend
@@ -677,17 +726,15 @@ class ProjectModal {
           el("button", { class: "h3p-btn ok",
                          text: "Approve \u2014 chain from this",
                          onclick: () => this.act("approve", "approved") }),
-          el("button", { class: "h3p-btn warn", text: "Re-roll",
-                         onclick: () => {
-                           app.queuePrompt(0, 1);
-                           toast("queued \u2014 next render replaces " +
-                                 "this take");
-                         } }),
           el("button", { class: "h3p-btn bad", text: "Reject",
                          onclick: () => this.showConfirm(
                            `Reject clip ${pend.index}? Its files go to ` +
                            `.trash/ and the chain steps back.`,
-                           () => this.act("reject", "rejected")) }));
+                           () => this.act("reject", "rejected")) }),
+          el("span", { class: "h3p-hint",
+                       text: "to re-roll: change the prompt or seed, then " +
+                             `Queue \u2014 it lands as clip ${pend.index} ` +
+                             `take ${pend.take + 1}` }));
       } else if (tail) {
         this.actions.append(
           el("button", { class: "h3p-btn warn",
@@ -700,6 +747,8 @@ class ProjectModal {
     }
 
     this.transport.style.display = "none";
+    if (this.video !== this.vA) this.swapBuffers();
+    this.vB.style.display = "none";
     this.video.controls = true;
     this.video.loop = true;
 
@@ -730,17 +779,15 @@ class ProjectModal {
           el("button", { class: "h3p-btn ok",
                          text: "Approve \u2014 chain from this",
                          onclick: () => this.act("approve", "approved") }),
-          el("button", { class: "h3p-btn warn", text: "Re-roll",
-                         onclick: () => {
-                           app.queuePrompt(0, 1);
-                           toast("queued \u2014 next render replaces " +
-                                 "this take");
-                         } }),
           el("button", { class: "h3p-btn bad", text: "Reject",
                          onclick: () => this.showConfirm(
                            `Reject clip ${shown.index}? Its files go to ` +
                            `.trash/ and the chain steps back.`,
-                           () => this.act("reject", "rejected")) }));
+                           () => this.act("reject", "rejected")) }),
+          el("span", { class: "h3p-hint",
+                       text: "to re-roll: change the prompt or seed, then " +
+                             `Queue \u2014 it lands as take ` +
+                             `${shown.take + 1}` }));
       } else {
         this.actions.append(
           el("button", { class: "h3p-btn warn",

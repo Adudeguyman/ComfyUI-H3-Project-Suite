@@ -143,7 +143,8 @@ def _write_video(path, images, audio, fps):
     arr = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
     n, height, width = arr.shape[0], arr.shape[1], arr.shape[2]
 
-    container = av.open(path, mode="w")
+    container = av.open(path, mode="w",
+                        options={"movflags": "+faststart"})
     try:
         vs = container.add_stream("libx264", rate=int(fps))
         vs.width, vs.height = width, height
