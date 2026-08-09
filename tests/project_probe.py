@@ -15,8 +15,8 @@ import tempfile
 _TESTS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_TESTS))
 
-from project import (Project, ProjectError, list_projects,  # noqa: E402
-                     validate_name)
+from project import (Project, ProjectError, branch_project,  # noqa: E402
+                     list_projects, suggest_branch_name, validate_name)
 
 
 def _fake_pair(proj, basename):
@@ -178,6 +178,34 @@ def main():
     p2.purge_trash()
     assert not os.path.isdir(p2.trash_dir)
     print("12. IS_CHANGED token moved, purge cleared .trash/")
+
+    # branching: fork an approved chain into an independent project
+    import shutil as _shutil
+    bp = Project(out, "Chain", create=True)
+    for i in (1, 2, 3):
+        base = "clip_%03d_take1" % i
+        for ext in (".mp4", ".safetensors"):
+            with open(os.path.join(bp.clips_dir, base + ext), "wb") as fh:
+                fh.write(os.urandom(256))
+        bp.record_render(i, 1, {"duration": 5.0})
+        bp.approve()
+    name = suggest_branch_name(out, "Chain", 2)
+    assert name == "Chain_from2", name
+    br = branch_project(out, "Chain", 2, name)
+    assert [c["index"] for c in br.clips] == [1, 2]
+    assert br.next_save() == (3, 1, "clip_003_take1")
+    assert br.branched_from == {"project": "Chain", "at_index": 2}
+    assert len(Project(out, "Chain").clips) == 3, "source changed"
+    a = os.path.join(bp.clips_dir, "clip_002_take1.safetensors")
+    b2 = os.path.join(br.clips_dir, "clip_002_take1.safetensors")
+    assert open(a, "rb").read() == open(b2, "rb").read()
+    assert os.stat(a).st_ino != os.stat(b2).st_ino, "branch is hardlinked"
+    # deleting the source outright must not touch the branch
+    _shutil.rmtree(bp.root)
+    br2 = Project(out, "Chain_from2")
+    assert br2.tail_latent_path().endswith("clip_002_take1.safetensors")
+    print("13. branch at clip 2: independent copies, source deletable, "
+          "next render clip_003_take1")
 
     print("all checks passed")
 

@@ -86,6 +86,87 @@ def list_projects(output_dir):
     return out
 
 
+def suggest_branch_name(output_dir, source_name, at_index):
+    """First free name of the form <source>_from4, then _from4_002..."""
+    base = "%s_from%d" % (validate_name(source_name), int(at_index))
+    root = projects_root(output_dir)
+    if not os.path.exists(os.path.join(root, base)):
+        return base
+    n = 2
+    while os.path.exists(os.path.join(root, "%s_%03d" % (base, n))):
+        n += 1
+    return "%s_%03d" % (base, n)
+
+
+def branch_project(output_dir, source_name, at_index, new_name):
+    """Fork a chain at an approved clip into a brand new project.
+
+    Clips 1..at_index are carried over as approved, so the branch's next
+    render is clip at_index+1, conditioned on the same latent the source
+    used. The source project is not touched at all.
+
+    Only each clip's SELECTED take comes along; alternates stay behind in
+    the source. Files are genuinely COPIED, not linked: a branch has to be
+    an independent workspace, so purging, moving, syncing or archiving
+    either project can never reach into the other. That costs real disk -
+    an AV latent is the expensive half - which is the price of the two
+    projects having nothing shared to break.
+    """
+    src = Project(output_dir, source_name)
+    at_index = int(at_index)
+    entry = src._entry(at_index)
+    if entry["status"] != "approved":
+        raise ProjectError(
+            "h3_suite: clip %d is %s; branch from an approved clip so the "
+            "new chain has a settled tail to continue from."
+            % (at_index, entry["status"]))
+    carried = src.clips[:at_index]
+    not_approved = [c["index"] for c in carried
+                    if c["status"] != "approved"]
+    if not_approved:
+        raise ProjectError(
+            "h3_suite: clips %s before the branch point are not approved."
+            % ", ".join(str(i) for i in not_approved))
+
+    new_name = validate_name(new_name)
+    dest_root = os.path.join(projects_root(output_dir), new_name)
+    if os.path.exists(dest_root):
+        raise ProjectError(
+            "h3_suite: project %r already exists; pick another name."
+            % new_name)
+
+    dest = Project(output_dir, new_name, create=True)
+    copied = 0
+    total_bytes = 0
+    try:
+        for c in carried:
+            for s_path in src._paths(c["basename"]):
+                if not os.path.isfile(s_path):
+                    continue                      # sidecar is optional
+                d_path = os.path.join(dest.clips_dir,
+                                      os.path.basename(s_path))
+                shutil.copy2(s_path, d_path)
+                copied += 1
+                total_bytes += os.path.getsize(d_path)
+            dest.clips.append({
+                "index": c["index"], "take": c["take"],
+                "status": "approved", "basename": c["basename"],
+                "from": c.get("from"),
+                **({"meta": dict(c["meta"])} if c.get("meta") else {}),
+                "takes": [{"take": c["take"], "basename": c["basename"],
+                           "meta": c.get("meta")}],
+            })
+        dest.branched_from = {"project": src.name, "at_index": at_index}
+        dest._write()
+    except Exception:
+        shutil.rmtree(dest_root, ignore_errors=True)  # no half-branches
+        raise
+    _LOG.info("h3_suite: branched %r at clip %d into %r (%d files, "
+              "%.1f MB copied)", src.name, at_index, new_name, copied,
+              total_bytes / (1024.0 * 1024.0))
+    return dest
+
+
 class Project:
     """One project folder plus its manifest, loaded eagerly.
 
@@ -112,6 +193,7 @@ class Project:
         elif create:
             os.makedirs(self.clips_dir, exist_ok=True)
             self.clips = []
+            self.branched_from = None
             self._write()
         else:
             raise ProjectError(
@@ -129,11 +211,14 @@ class Project:
                 "version %d." % (self.manifest_path, data.get("version"),
                                  VERSION))
         self.clips = list(data.get("clips", []))
+        self.branched_from = data.get("branched_from")
         self._check_invariants()
 
     def _write(self):
         self._check_invariants()
         data = {"version": VERSION, "name": self.name, "clips": self.clips}
+        if getattr(self, "branched_from", None):
+            data["branched_from"] = self.branched_from
         fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".manifest_",
                                    suffix=".json")
         try:

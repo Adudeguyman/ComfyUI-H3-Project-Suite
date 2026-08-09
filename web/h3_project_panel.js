@@ -297,6 +297,22 @@ class ProjectModal {
       if (e.key === "Escape") this.exportRow.classList.remove("on");
       e.stopPropagation();
     };
+    this.branchInput = el("input", { class: "h3p-input" });
+    this.branchInput.onkeydown = (e) => {
+      if (e.key === "Enter") this.doBranch();
+      if (e.key === "Escape") this.branchRow.classList.remove("on");
+      e.stopPropagation();
+    };
+    this.branchNote = el("span", { class: "h3p-hint" });
+    this.branchRow = el("div", { class: "h3p-namewrap" },
+      el("span", { class: "h3p-takelabel", text: "branch as" }),
+      this.branchInput,
+      el("button", { class: "h3p-btn ok", text: "Create branch",
+                     onclick: () => this.doBranch() }),
+      el("button", { class: "h3p-btn", text: "Cancel",
+                     onclick: () => this.branchRow.classList.remove("on") }),
+      this.branchNote);
+
     this.exportRow = el("div", { class: "h3p-namewrap" },
       el("span", { class: "h3p-takelabel", text: "save as" }),
       this.exportInput,
@@ -342,8 +358,8 @@ class ProjectModal {
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
                this.viewSub,
                el("div", { class: "h3p-spacer" }), this.modes),
-            this.player, this.transport, this.exportRow, this.confirm,
-            this.actions),
+            this.player, this.transport, this.exportRow, this.branchRow,
+            this.confirm, this.actions),
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
             this.railBody)),
@@ -467,6 +483,48 @@ class ProjectModal {
         });
       })
       .catch((e) => toast(e.message, true));
+  }
+
+  async branchFrom(index) {
+    this._branchIndex = index;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/branch_name?name=` +
+        `${encodeURIComponent(this.name())}&index=${index}`);
+      const { suggested, error } = await r.json();
+      if (error) throw new Error(error);
+      this.branchInput.value = suggested;
+    } catch (e) {
+      this.branchInput.value = `${this.name()}_from${index}`;
+    }
+    const n = this.state?.clips?.length || 0;
+    this.branchNote.textContent =
+      `copies clips 1\u2013${index} into a new project; ` +
+      (n > index ? `clips ${index + 1}\u2013${n} stay here untouched`
+                 : "this project is untouched");
+    this.branchRow.classList.add("on");
+    this.branchInput.focus();
+    this.branchInput.select();
+  }
+
+  async doBranch() {
+    const newName = this.branchInput.value.trim();
+    if (!newName) return;
+    this.branchRow.classList.remove("on");
+    toast("copying clips\u2026");
+    try {
+      const out = await post("/h3_suite/project/branch", {
+        name: this.name(), index: this._branchIndex, new_name: newName,
+      });
+      toast(`branched into "${newName}" at clip ${this._branchIndex}`);
+      this.setName(newName);
+      this.viewing = null;
+      this._sig = null;
+      this.durations = {};
+      await this.loadProjects();
+      this.select.value = newName;
+      this.refresh(true);
+    } catch (e) { toast(e.message, true); }
   }
 
   async selectTake(take) {
@@ -783,6 +841,7 @@ class ProjectModal {
                                             v.loop = false; }
 
       const pend = s.pending;
+      const shownSeg = this.timeline?.[this.curSeg] || null;
       this.viewTitle.textContent = pend
         ? `Chain \u2014 clip ${pend.index} take ${pend.take} pending at ` +
           `the end`
@@ -849,6 +908,16 @@ class ProjectModal {
                          text: `Reopen clip ${tail.index}\u2026`,
                          onclick: () => this.reopen(tail.index) }));
       }
+      const at = (shownSeg && shownSeg.clip.status === "approved")
+        ? shownSeg.clip : tail;
+      if (at) {
+        this.actions.append(
+          el("button", { class: "h3p-btn",
+                         text: `Branch from clip ${at.index}\u2026`,
+                         title: "copy clips 1..N into a new project and " +
+                                "iterate there, leaving this one intact",
+                         onclick: () => this.branchFrom(at.index) }));
+      }
       this.paintRail(s, name, approved, tail, null);
       this.paintFoot(approved, tail, name);
       return;
@@ -907,7 +976,12 @@ class ProjectModal {
         this.actions.append(
           el("button", { class: "h3p-btn warn",
                          text: `Reopen clip ${shown.index}\u2026`,
-                         onclick: () => this.reopen(shown.index) }));
+                         onclick: () => this.reopen(shown.index) }),
+          el("button", { class: "h3p-btn",
+                         text: `Branch from clip ${shown.index}\u2026`,
+                         title: "copy clips 1..N into a new project and " +
+                                "iterate there, leaving this one intact",
+                         onclick: () => this.branchFrom(shown.index) }));
         if (this.viewing) {
           this.actions.append(
             el("button", { class: "h3p-btn", text: "Back to latest",

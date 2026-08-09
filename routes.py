@@ -168,6 +168,29 @@ def _register():
         out["dropped"] = dropped
         return out
 
+    @routes.get("/h3_suite/project/branch_name")
+    async def branch_name(request):
+        import folder_paths as fp
+        from .project import suggest_branch_name
+        name = request.rel_url.query.get("name")
+        index = int(request.rel_url.query.get("index", 1))
+        try:
+            return web.json_response({"suggested": suggest_branch_name(
+                fp.get_output_directory(), name, index)})
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+
+    @routes.post("/h3_suite/project/branch")
+    @_json_post
+    def branch(body):
+        import folder_paths as fp
+        from .project import branch_project
+        dest = branch_project(fp.get_output_directory(), body.get("name"),
+                              int(body.get("index")), body.get("new_name"))
+        out = _state(dest)
+        out["branched_from"] = dest.branched_from
+        return out
+
     @routes.post("/h3_suite/project/open_folder")
     @_json_post
     def open_folder(body):
