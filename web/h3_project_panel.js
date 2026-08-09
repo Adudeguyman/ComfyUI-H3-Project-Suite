@@ -301,6 +301,9 @@ class ProjectModal {
                          onclick: () => this.showNameEntry() }),
           this.nameWrap,
           el("div", { class: "h3p-spacer" }),
+          el("button", { class: "h3p-btn", text: "Open folder",
+                         title: "opens on the machine running ComfyUI",
+                         onclick: () => this.openFolder() }),
           el("button", { class: "h3p-btn", text: "Export master",
                          onclick: () => this.exportMaster(false) }),
           el("button", { class: "h3p-btn",
@@ -450,6 +453,14 @@ class ProjectModal {
         { name: this.name(), include_pending: !!includePending });
       toast(`${out.preview ? "preview" : "master"} written ` +
             `(${out.clip_count} clips): ${out.master}`);
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async openFolder() {
+    try {
+      const out = await post("/h3_suite/project/open_folder",
+                             { name: this.name() });
+      toast(`opened ${out.path}`);
     } catch (e) { toast(e.message, true); }
   }
 

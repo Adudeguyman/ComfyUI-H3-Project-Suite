@@ -119,6 +119,35 @@ def _register():
         p.purge_trash()
         return _state(p)
 
+    @routes.post("/h3_suite/project/open_folder")
+    @_json_post
+    def open_folder(body):
+        import subprocess
+        import sys
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        target = os.path.realpath(p.root)
+        if not os.path.isdir(target):
+            raise ProjectError("h3_suite: %s does not exist." % target)
+        # this opens on the machine RUNNING ComfyUI, not the one running
+        # the browser - obvious locally, surprising over --listen, so the
+        # response carries the path for the panel to report either way
+        try:
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", target])
+            elif os.name == "nt":
+                os.startfile(target)  # noqa: S606
+            else:
+                subprocess.Popen(["xdg-open", target],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+        except FileNotFoundError:
+            raise ProjectError(
+                "h3_suite: no file manager opener available on the server "
+                "(%s). The folder is at %s" % (sys.platform, target))
+        return {"path": target}
+
     @routes.post("/h3_suite/project/export")
     @_json_post
     def export(body):
