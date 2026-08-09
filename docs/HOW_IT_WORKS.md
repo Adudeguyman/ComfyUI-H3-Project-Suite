@@ -182,9 +182,10 @@ be, so the slice has to begin on a phase-0 boundary - step index divisible
 by 5 - for its internal coverage pattern to match a fresh encode's and for
 `_step_offsets` to apply unchanged. H3 clip lengths are congruent 5 mod 17
 by construction, which forces the saved step count to `2 mod 5`, which
-makes the phase-aligned tail runs come out to exactly 5, 22 or 39 pixel
-frames: the familiar grid minus the one-frame run. The default context
-length of 22 lands on it without any adjustment.
+makes the phase-aligned tail runs come out to exactly 5, 22, 39 or 56
+pixel frames (and onward up the 17m+5 ladder): the familiar grid minus
+the one-frame run. The default context length of 22 lands on it without
+any adjustment.
 
 Two consequences worth knowing. Latents cannot be resized, so a chain on
 this path is locked to the resolution of its first clip and a mismatch is

@@ -95,7 +95,10 @@ AUDIO_HZ = 40.0
 # clip instead of [-5..-1]. The pinned run would end five frames early and the
 # delivered clip would continue from the wrong instant. So off-grid requests
 # are snapped DOWN before slicing, keeping content and coverage in agreement.
-VIDEO_RUN_GRID = (39, 22, 5, 1)
+# every 17m+5 length phase-aligns on the latent path (its step count
+# is 2 mod 5); the node's input caps at 56 like upstream, but the
+# snap-down logic handles any of these if a longer window arrives
+VIDEO_RUN_GRID = (124, 107, 90, 73, 56, 39, 22, 5, 1)
 
 
 def _pixel_frames(latent_t):
@@ -230,12 +233,14 @@ class H3Context:
                 "conditioning": ("CONDITIONING",),
                 "latent": ("LATENT",),
                 "context_length": ("INT", {
-                    "default": 5, "min": 1, "max": 39,
+                    "default": 5, "min": 1, "max": 56,
                     "tooltip": "Frames of the previous clip to carry over. In "
-                               "video mode only 1, 5, 22 and 39 are distinct; "
-                               "anything else is snapped DOWN to the nearest so "
-                               "the pinned run always ends at the clip's last "
-                               "frame."}),
+                               "video mode only 1, 5, 22, 39 and 56 are "
+                               "distinct; anything else is snapped DOWN to "
+                               "the nearest so the pinned run always ends at "
+                               "the clip's last frame. 56 spends ~2.3s of the "
+                               "new clip re-treading the old one - smoothest "
+                               "joins, least new content."}),
                 "encode_mode": (["video", "frames"], {
                     "default": "video",
                     "tooltip": "video: one VAE call, motion lives inside the "

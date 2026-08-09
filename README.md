@@ -121,7 +121,7 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 Almost everything can be left alone. Three are worth understanding:
 
-**Context length (22)** — how much of the previous clip gets handed over. Bigger means a smoother join but less freedom for the new clip to do something different. 22 frames (just under a second) is a good default. The values that work are 5, 22 and 39.
+**Context length (22)** — how much of the previous clip gets handed over. Bigger means a smoother join but less freedom for the new clip to do something different. 22 frames (just under a second) is a good default. The values that work are 5, 22, 39 and 56 — at 56 nearly two and a half seconds of the new clip re-tread the old one, which gives the smoothest joins and the least new content per render.
 
 **Video source (latent)** — leave this on `latent`. That's the mode that skips the decoding step between clips, as described at the top. `frames` is the older way of doing it, kept for compatibility with hand-built graphs.
 

@@ -296,6 +296,38 @@ def main():
     print("vae optional: latent path runs unwired, frames path refuses "
           "with a clear message")
 
+    # 56-frame window (upstream 0.2.0 parity): a 141-frame clip is 42
+    # latent steps; the 17-step phase-0 tail starts at step 25 and covers
+    # exactly 56 pixel frames
+    lt56 = 42
+    assert nodes._pixel_frames(lt56) == 141
+    at56 = 235                          # 141 * 5/3 exactly, overhang 0
+    prev56 = {"samples": Nested([
+        T(np.arange(1 * 16 * lt56 * h * w, dtype=np.float32
+                    ).reshape(1, 16, lt56, h, w)),
+        T(np.zeros((1, 32, 2, at56), dtype=np.float32)),
+    ])}
+    tgt56 = {"samples": Nested([
+        T(np.zeros((1, 16, lt56, h, w), dtype=np.float32)),
+        T(np.zeros((1, 32, 2, at56), dtype=np.float32)),
+    ])}
+    captured.clear()
+    out56, trim56 = node.apply(
+        conditioning=[["c", {}]], latent=tgt56,
+        context_length=56, encode_mode="video", anchor_mode="head",
+        crop="disabled", audio_context_length=56, audio_mode="timeline",
+        video_source="latent", context_latent=prev56)
+    kf56 = captured["minimax_keyframes"]
+    assert len(kf56) == 17, "expected 17 pinned steps, got %d" % len(kf56)
+    assert trim56 == 56, trim56
+    src56 = prev56["samples"].parts[0]
+    for j, kf in enumerate(kf56):
+        want = src56.a[:, :, 25 + j:26 + j]
+        got = kf["latent"].a
+        assert got.shape == want.shape and np.array_equal(got, want), j
+    print("56-frame window: 17 blocks are steps 25..41 of the source "
+          "verbatim, trim 56")
+
     # guards: unwired latent, resolution mismatch, no usable run
     captured.clear()
     for kwargs, expect in [
