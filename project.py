@@ -621,13 +621,10 @@ class Project:
     def reopen(self, index):
         """Set an approved clip back to pending; everything after it was
         conditioned on content about to change, so it is dropped to trash.
-        Returns the basenames trashed, so a UI can confirm the blast
-        radius BEFORE calling (see cascade_of)."""
-        pend = self.pending()
-        if pend is not None:
-            raise ProjectError(
-                "h3_suite: clip %d is pending; approve or reject it before "
-                "reopening an earlier clip." % pend["index"])
+        That includes a clip still awaiting review: it continues from the
+        clip being reopened, so it goes with the rest rather than having
+        to be disposed of first. Returns the basenames trashed, so a UI
+        can confirm the blast radius BEFORE calling (see cascade_of)."""
         target = self._entry(index)
         if target["status"] != "approved":
             raise ProjectError("h3_suite: clip %d is %s, not approved."

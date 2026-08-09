@@ -923,12 +923,18 @@ class ProjectModal extends ChainTimeline {
         }
 
         const n = drop.length;
+        const pend = this.state?.pending;
+        const pendNote = pend && pend.index > index
+          ? `\n\n(That includes clip ${pend.index}, still awaiting ` +
+            `review — it continues from clip ${index}, so it goes too.)`
+          : "";
         const msg =
           `Reopen clip ${index}?\n\n` +
           `${n} later clip${n === 1 ? "" : "s"} ` +
           `${n === 1 ? "was" : "were"} built on it and can no longer ` +
-          `follow on:\n\n${drop.map((d) => "  " + d).join("\n")}\n\n` +
-          `Pick what happens to ${n === 1 ? "it" : "them"}:`;
+          `follow on:\n\n${drop.map((d) => "  " + d).join("\n")}` +
+          pendNote + `\n\nPick what happens to ` +
+          `${n === 1 ? "it" : "them"}:`;
         const choices = [
           { label: "Back them up first", cls: "ok",
             title: "copy the whole chain into a separate project, then " +
@@ -959,11 +965,26 @@ class ProjectModal extends ChainTimeline {
     const key = clip ? `${clip.index}:${clip.status}` : "none";
     if (key === this._branchBtnIndex) return;   // nothing changed
     this._branchBtnIndex = key;
+    const r = this.reopenBtn;
     if (!clip) {
       b.style.display = "none";
+      if (r) r.style.display = "none";
       return;
     }
     b.style.display = "";
+    // an approved clip stays actionable even while a later one is
+    // pending - that pending clip continues from it, so reopening
+    // simply takes it along
+    if (r) {
+      const approved = clip.status === "approved";
+      r.style.display = approved ? "" : "none";
+      if (approved) {
+        r.textContent = `Reopen clip ${clip.index}\u2026`;
+        r.title = "send clip " + clip.index + " back for a re-render; " +
+                  "you will be shown what that costs first";
+        r.onclick = () => this.reopen(clip.index);
+      }
+    }
     if (clip.status === "approved") {
       b.disabled = false;
       b.textContent = `Branch from clip ${clip.index}\u2026`;
@@ -1280,19 +1301,16 @@ class ProjectModal extends ChainTimeline {
                        text: "to re-roll: change the prompt or seed, then " +
                              `Queue \u2014 it lands as clip ${pend.index} ` +
                              `take ${pend.take + 1}` }));
-      } else if (tail) {
-        this.actions.append(
-          el("button", { class: "h3p-btn warn",
-                         text: `Reopen clip ${tail.index}\u2026`,
-                         onclick: () => this.reopen(tail.index) }));
       }
       // the branch target follows the PLAYHEAD, not whatever segment
       // happened to be current when this row was built. paintPlayhead
       // keeps its label and handler in sync as you scrub.
+      this.reopenBtn = el("button", { class: "h3p-btn warn",
+        text: "Reopen\u2026" });
       this.branchBtn = el("button", { class: "h3p-btn", text: "Branch\u2026",
         title: "copy clips 1..N into a new project and iterate there, " +
                "leaving this one intact" });
-      this.actions.append(this.branchBtn);
+      this.actions.append(this.reopenBtn, this.branchBtn);
       this._branchBtnIndex = null;
       this.syncBranchButton();
       this.paintRail(s, name, approved, tail, null);

@@ -317,6 +317,32 @@ def main():
     print("17. snapshot before reopen: backup keeps all 5 clips and still "
           "chains, original cut to 3 with clip 3 pending")
 
+    # reopening an earlier clip while a later one awaits review: the
+    # pending clip continues from the target, so it is part of the cascade
+    bd = Project(out, "Bird", create=True)
+    for i in (1, 2):
+        base = "clip_%03d_take1" % i
+        for ext in (".mp4", ".safetensors"):
+            with open(os.path.join(bd.clips_dir, base + ext), "wb") as fh:
+                fh.write(b"x" * 64)
+        bd.record_render(i, 1, {"duration": 5.0})
+        if i == 1:
+            bd.approve()
+    assert bd.pending()["index"] == 2
+    assert bd.cascade_of(1) == ["clip_002_take1"]
+    assert bd.reopen(1) == ["clip_002_take1"]
+    assert len(bd.clips) == 1 and bd.pending()["index"] == 1
+    assert bd.chain_active() is False
+    assert bd.next_save() == (1, 2, "clip_001_take2")
+    try:
+        bd.reopen(1)
+        raise AssertionError("reopened an already-pending clip")
+    except ProjectError as exc:
+        assert "not approved" in str(exc)
+    print("18. reopen works with a later clip pending; that clip is "
+          "carried into the cascade, and reopening a pending clip is "
+          "still refused")
+
     print("all checks passed")
 
 
