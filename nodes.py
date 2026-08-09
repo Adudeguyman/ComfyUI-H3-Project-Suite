@@ -99,6 +99,10 @@ AUDIO_HZ = 40.0
 # is 2 mod 5); the node's input caps at 56 like upstream, but the
 # snap-down logic handles any of these if a longer window arrives
 VIDEO_RUN_GRID = (124, 107, 90, 73, 56, 39, 22, 5, 1)
+# what the node offers: the grid values a single clip can actually supply.
+# Longer runs exist on the ladder but need a clip longer than most people
+# render, and the snap-down path still handles them if one shows up.
+CONTEXT_LENGTHS = [1, 5, 22, 39, 56]
 
 
 def _pixel_frames(latent_t):
@@ -232,15 +236,20 @@ class H3Context:
             "required": {
                 "conditioning": ("CONDITIONING",),
                 "latent": ("LATENT",),
-                "context_length": ("INT", {
-                    "default": 5, "min": 1, "max": 56,
-                    "tooltip": "Frames of the previous clip to carry over. In "
-                               "video mode only 1, 5, 22, 39 and 56 are "
-                               "distinct; anything else is snapped DOWN to "
-                               "the nearest so the pinned run always ends at "
-                               "the clip's last frame. 56 spends ~2.3s of the "
-                               "new clip re-treading the old one - smoothest "
-                               "joins, least new content."}),
+                # INTs, not strings: existing workflows store this widget
+                # as a number, and a string list would fail ComfyUI's combo
+                # validation on load. Only these values exist on the VAE
+                # grid, so offering the in-betweens only ever produced a
+                # snap-down warning.
+                "context_length": (CONTEXT_LENGTHS, {
+                    "default": 22,
+                    "tooltip": "Frames of the previous clip to carry over. "
+                               "Only these land on the VAE grid, so the "
+                               "pinned run always ends exactly at the clip's "
+                               "last frame. Bigger = smoother join, less new "
+                               "content: 56 spends ~2.3s of the new clip "
+                               "re-treading the old one. 1 is effectively "
+                               "last-frame chaining, useful as a baseline."}),
                 "encode_mode": (["video", "frames"], {
                     "default": "video",
                     "tooltip": "video: one VAE call, motion lives inside the "
@@ -485,6 +494,7 @@ class H3Context:
               audio_mode="timeline", video_source="frames", vae=None,
               context_frames=None, context_latent=None, audio_vae=None,
               context_audio=None, enabled=True):
+        context_length = int(context_length)
         if enabled is False:
             # inert passthrough: conditioning untouched, trim 0 makes the
             # Trim node a no-op too. The whole chain path disarms off one
