@@ -36,7 +36,7 @@ The short version of how: in its default *latent* mode, each clip is handed to t
 2. Restart ComfyUI.
 3. Hard-refresh your browser (Ctrl+Shift+R).
 
-You need `ffmpeg` on your system for the export button. Everything else ships with ComfyUI.
+You need `ffmpeg` on your system for the export button. Levelling a join also needs `av` and `numpy`, which most ComfyUI installs already have — if yours doesn't, the rest of the pack works fine and only that one feature reports a missing dependency.
 
 **Important:** if you have the original *ComfyUI-H3-Motion-Context* pack installed, remove or disable it. The two can't run at the same time — this one detects the conflict and refuses to run rather than produce a bad render.
 
@@ -166,7 +166,9 @@ If a join shows a texture or quality change about a second in, that's the point 
 ```
 ComfyUI/output/h3_projects/YourProject/
 ├── project.json          the chain's history
-├── clips/                your clips, plus the data that links them
+├── clips/                your clips, plus the latents that link them
+│                         and a .json per take holding the prompt and
+│                         workflow that made it
 ├── .trash/               rejected and cleaned-up takes
 └── YourProject_master.mp4
 ```
