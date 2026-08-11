@@ -27,17 +27,24 @@ export.
   9/11`, plus `pending` or `levelled` when they apply. Hovering gives
   the basename and what the clip continues from.
 
-### seed_head (experimental)
+### seed_head, on by default
 
-`H3 Context` gains a third output, `latent`, and a `seed_head` toggle.
-With it on, the pinned steps are written into the clip's starting latent
-and held there during sampling, so the sampler's trajectory begins from
-the previous clip's state rather than from noise merely conditioned
-toward it. **Wire the node's latent output into the sampler to use it.**
-Off by default, and a passthrough when off.
+`H3 Context` gains a third output, `latent`, and a `seed_head` toggle
+which is ON by default. The pinned steps are written into the clip's
+starting latent and held there during sampling, so the sampler's
+trajectory begins from the previous clip's state rather than from noise
+merely conditioned toward it.
+
+**This needs the node's `latent` output wired into the sampler's
+`latent_image`.** Both example workflows now are. A hand-built graph
+that still feeds the sampler from the MiniMax node is unaffected: the
+setting simply does nothing.
 
 `head_hold` controls how firmly the seeded head is held; lower values
 let the model repaint it slightly.
+
+`video_source` now defaults to `latent`, which is what every example
+workflow and the whole project layer already used.
 
 ### Diagnostics
 

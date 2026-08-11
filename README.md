@@ -63,7 +63,7 @@ H3 Project Hub ──context_latent──▶ H3 Context ──conditioning──
 
 Then the normal path: sampler ➜ decode ➜ **Trim** ➜ **Project Save**.
 
-H3 Context also has a `latent` output. You only need it for the experimental **seed head** setting below; otherwise leave it unconnected and let the sampler take its latent straight from the MiniMax node as usual.
+H3 Context's `latent` output goes to your sampler's `latent_image`, in place of the wire from the MiniMax node. That's what lets the **seed head** setting work; both example workflows are already wired this way.
 
 ---
 
@@ -137,15 +137,15 @@ Almost everything can be left alone. Three are worth understanding:
 
 **Context length (22)** — how much of the previous clip gets handed over. It's a dropdown of the only values that exist: 1, 5, 22, 39 and 56. Bigger means a smoother join but less new footage per render — at 56, nearly two and a half seconds of the new clip re-tread the old one. 22 (just under a second) is a good default, and it's worth changing per clip: a slow push-in benefits from 39 or 56 where a fast cut doesn't.
 
-**Video source (latent)** — leave this on `latent`. That's the mode that skips the decoding step between clips, as described at the top. `frames` is the older way of doing it, kept for compatibility with hand-built graphs.
+**Video source (latent)** — the default, and the mode that skips the decoding step between clips as described at the top. `frames` is the older way of doing it, kept for compatibility with hand-built graphs.
 
 **fps (24)** — must match your video's frame rate. H3 runs at 24, so leave it unless you know you've changed something.
 
-**Seed head (off) — experimental.** Normally the carried-over frames are given to the model as something to *agree with*: it generates the new clip from scratch and is steered toward matching them. With this on, those frames are also written directly into the clip's starting point and held there while it renders, so the model builds forward from the previous clip's actual content instead of from noise that merely resembles it.
+**Seed head (on)** — normally the carried-over frames are given to the model as something to *agree with*: it generates the new clip from scratch and is steered toward matching them. With this on, those frames are also written directly into the clip's starting point and held there while it renders, so the model builds forward from the previous clip's actual content instead of from noise that merely resembles it.
 
-It needs one wiring change: **the sampler's latent must come from H3 Context's `latent` output** instead of straight from the MiniMax node. Without that rewire the toggle does nothing.
+This needs the sampler's latent to come from **H3 Context's `latent` output** rather than straight from the MiniMax node. Both example workflows are wired that way. If you built your graph by hand and the sampler still takes its latent from the MiniMax node, this setting does nothing — no harm, just no effect.
 
-This is genuinely experimental. It may improve how motion carries across a join, or it may leave a visible texture change where the held part ends — about a second in. Test it against the same clip with the toggle off before trusting it. **Head hold (1.0)** controls how firmly those frames are held; try 0.85 if you see a boundary.
+If a join shows a texture or quality change about a second in, that's the point where the held frames end. **Head hold (1.0)** controls how firmly they're held; try 0.85, or switch seed head off to compare.
 
 ---
 

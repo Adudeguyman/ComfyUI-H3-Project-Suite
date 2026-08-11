@@ -2,7 +2,7 @@
   "id": "e3f2b845-8f2c-4b5a-9caf-eac1029d3e7e",
   "revision": 0,
   "last_node_id": 344,
-  "last_link_id": 641,
+  "last_link_id": 642,
   "nodes": [
     {
       "id": 185,
@@ -2288,9 +2288,7 @@
           "name": "*",
           "shape": 3,
           "type": "LATENT",
-          "links": [
-            510
-          ]
+          "links": []
         }
       ],
       "title": "Any Switch Latent",
@@ -5000,7 +4998,7 @@
         {
           "name": "latent_image",
           "type": "LATENT",
-          "link": 510
+          "link": 642
         }
       ],
       "outputs": [
@@ -5846,6 +5844,14 @@
           "links": [
             611
           ]
+        },
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            642
+          ],
+          "slot_index": 2
         }
       ],
       "title": "H3 Context (chain)",
@@ -5864,7 +5870,9 @@
         "disabled",
         22,
         "timeline",
-        "latent"
+        "latent",
+        true,
+        1.0
       ],
       "color": "#2a363b",
       "bgcolor": "#1e2b2e"
@@ -6237,14 +6245,6 @@
       0,
       248,
       0,
-      "LATENT"
-    ],
-    [
-      510,
-      248,
-      0,
-      190,
-      4,
       "LATENT"
     ],
     [
@@ -6782,6 +6782,14 @@
       328,
       3,
       "BOOLEAN"
+    ],
+    [
+      642,
+      328,
+      2,
+      190,
+      4,
+      "LATENT"
     ]
   ],
   "groups": [

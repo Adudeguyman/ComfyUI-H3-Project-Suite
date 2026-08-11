@@ -281,8 +281,8 @@ class H3Context:
                                "clip, which the model imitates (similar "
                                "music, not phase-locked) rather than "
                                "continues."}),
-                "video_source": (["frames", "latent"], {
-                    "default": "frames",
+                "video_source": (["latent", "frames"], {
+                    "default": "latent",
                     "tooltip": "frames: pin decoded frames from "
                                "context_frames (one VAE encode; each link "
                                "adds a decode/encode round trip, which "
@@ -295,8 +295,8 @@ class H3Context:
                                "clip; context_frames and encode_mode are "
                                "ignored."}),
                 "seed_head": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "EXPERIMENTAL, latent path only. Also write "
+                    "default": True,
+                    "tooltip": "Latent path only. Also writes "
                                "the pinned steps INTO the clip's starting "
                                "latent and hold them there while sampling "
                                "(temporal inpainting), so the sampler's "
