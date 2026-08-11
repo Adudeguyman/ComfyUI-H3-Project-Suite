@@ -147,6 +147,44 @@ def _register():
         out["storage"] = p.storage_report()
         return out
 
+    @routes.post("/h3_suite/project/level_match")
+    @_json_post
+    def level_match(body):
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        p.set_level_match(int(body.get("index")),
+                          bool(body.get("enabled")))
+        return _state(p)
+
+    @routes.get("/h3_suite/project/level_match_preview")
+    async def level_match_preview(request):
+        """What the correction WOULD do, measured, without writing."""
+        try:
+            p = _project(request)
+            index = int(request.rel_url.query.get("index", 0))
+            clips = p.clips
+            if index <= 1 or index > len(clips):
+                raise ProjectError("h3_suite: no join before clip %d."
+                                   % index)
+            from .level_match import measure
+            plan = measure(p.clip_video_path(clips[index - 2]["basename"]),
+                           p.clip_video_path(clips[index - 1]["basename"]))
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except Exception as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        if plan is None:
+            return web.json_response(
+                {"needed": False,
+                 "message": "this join is already level; nothing to "
+                            "correct"})
+        return web.json_response({
+            "needed": True, "step": round(plan["step"], 2),
+            "tau": (round(plan["tau"], 1) if plan["tau"] else None),
+            "span": plan["span"],
+            "gain": round(plan["gain"], 4),
+        })
+
     @routes.post("/h3_suite/project/purge_trash")
     @_json_post
     def purge(body):
@@ -294,12 +332,34 @@ def _register():
         if missing:
             raise ProjectError("h3_suite: clip videos missing: %s"
                                % ", ".join(missing))
+        # level matching: correct flagged clips into temp files first, so
+        # the concat itself stays a plain join of ready files
+        tmp_dir = None
+        matched = []
+        paths = [p.clip_video_path(c["basename"]) for c in clips]
+        if body.get("level_match", True):
+            flagged = [i for i, c in enumerate(clips)
+                       if i > 0 and c.get("level_match")]
+            if flagged:
+                from .level_match import correct
+                tmp_dir = os.path.join(p.root, ".levelmatch")
+                os.makedirs(tmp_dir, exist_ok=True)
+                for i in flagged:
+                    dst = os.path.join(tmp_dir,
+                                       clips[i]["basename"] + ".mp4")
+                    try:
+                        plan = correct(paths[i - 1], paths[i], dst)
+                    except Exception as exc:
+                        _LOG.warning("h3_suite: level match failed on %s: "
+                                     "%s", clips[i]["basename"], exc)
+                        continue
+                    if plan is not None:
+                        paths[i] = dst
+                        matched.append(clips[i]["index"])
         list_path = os.path.join(p.root, ".concat.txt")
         with open(list_path, "w", encoding="utf-8") as fh:
-            for c in clips:
-                fh.write("file '%s'\n"
-                         % p.clip_video_path(c["basename"]).replace("'",
-                                                                    "'\\''"))
+            for path in paths:
+                fh.write("file '%s'\n" % path.replace("'", "'\\''"))
         # no explicit name means the first FREE name, never a silent
         # overwrite of a master someone already kept
         default = _suggest_export(p, preview)[:-4]
@@ -310,12 +370,22 @@ def _register():
             raise ProjectError(
                 "h3_suite: export filename must stay in the project "
                 "folder.")
-        # identical-format clips by construction: stream copy, no re-encode
-        proc = subprocess.run(
-            [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
-             "-c", "copy", master],
-            capture_output=True, text=True)
+        # untouched clips are identical by construction and stream copy;
+        # once any clip has been re-encoded for level matching the whole
+        # concat has to be re-encoded so the parameters agree
+        if matched:
+            cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i",
+                   list_path, "-c:v", "libx264", "-crf", "17",
+                   "-pix_fmt", "yuv420p", "-c:a", "aac",
+                   "-movflags", "+faststart", master]
+        else:
+            cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i",
+                   list_path, "-c", "copy", master]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
         os.unlink(list_path)
+        if tmp_dir and os.path.isdir(tmp_dir):
+            import shutil as _sh
+            _sh.rmtree(tmp_dir, ignore_errors=True)
         if proc.returncode != 0:
             raise ProjectError("h3_suite: ffmpeg concat failed: %s"
                                % proc.stderr[-400:])
@@ -323,6 +393,7 @@ def _register():
         out["master"] = master
         out["preview"] = bool(preview)
         out["clip_count"] = len(clips)
+        out["level_matched"] = matched
         return out
 
     @routes.get("/h3_suite/project/video")

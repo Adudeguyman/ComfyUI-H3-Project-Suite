@@ -533,6 +533,24 @@ class Project:
                 total += os.path.getsize(path)
         return total
 
+    def set_level_match(self, index, enabled):
+        """Flag the join BEFORE this clip for level matching on export.
+
+        Stored per clip because joins differ: one may need it and its
+        neighbour may be fine, and a project-wide switch would correct
+        seams that were never broken.
+        """
+        entry = self._entry(index)
+        if index <= 1:
+            raise ProjectError(
+                "h3_suite: clip 1 has no join before it to match.")
+        if enabled:
+            entry["level_match"] = True
+        else:
+            entry.pop("level_match", None)
+        self._write()
+        return entry
+
     def storage_report(self):
         """What this project costs, split by what you can safely reclaim.
 

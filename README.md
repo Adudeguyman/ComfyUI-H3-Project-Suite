@@ -117,6 +117,16 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
+## Levelling a join
+
+Sometimes a clip opens slightly brighter than the one before it and settles back over a second or so. It happens where the new clip stops being held to the old one and relaxes toward its own exposure.
+
+**Level-match join** (next to Reopen when you're on a clip) measures that step and tells you what it found before you commit — how big the step is, and how long it takes to settle. Turn it on and the export corrects that clip's opening so it meets the previous one, fading the correction out as the clip settles.
+
+It's per join, because joins differ: one may need it and the next may be fine. Your clips are never modified — only the exported master. An export containing a corrected join is re-encoded rather than copied, so it takes longer than a plain one.
+
+---
+
 ## Settings worth knowing
 
 Almost everything can be left alone. Three are worth understanding:

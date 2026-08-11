@@ -985,6 +985,25 @@ class ProjectModal extends ChainTimeline {
         r.onclick = () => this.reopen(clip.index);
       }
     }
+    // the join belongs to the clip AFTER it, so clip 1 has none
+    const lb = this.levelBtn;
+    if (lb) {
+      const has = clip.index > 1;
+      lb.style.display = has ? "" : "none";
+      if (has) {
+        const on = !!clip.level_match;
+        lb.textContent = on
+          ? `\u2713 Level-matching join ${clip.index - 1}\u2192` +
+            `${clip.index}`
+          : `Level-match join ${clip.index - 1}\u2192${clip.index}`;
+        lb.className = "h3p-btn" + (on ? " ok" : "");
+        lb.title = on
+          ? "on export, clip " + clip.index + "'s opening is corrected to " +
+            "meet clip " + (clip.index - 1) + "'s level"
+          : "measure this join and correct the brightness step on export";
+        lb.onclick = () => this.toggleLevelMatch(clip);
+      }
+    }
     if (clip.status === "approved") {
       b.disabled = false;
       b.textContent = `Branch from clip ${clip.index}\u2026`;
@@ -1000,6 +1019,51 @@ class ProjectModal extends ChainTimeline {
                 `from there.`;
       b.onclick = null;
     }
+  }
+
+  async toggleLevelMatch(clip) {
+    const on = !!clip.level_match;
+    if (on) {
+      try {
+        await post("/h3_suite/project/level_match",
+                   { name: this.name(), index: clip.index, enabled: false });
+        toast(`join ${clip.index - 1}\u2192${clip.index} left as rendered`);
+        this._branchBtnIndex = null;
+        this.refresh(true);
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
+    // measure first: turning this on without saying what it found would
+    // be asking the user to trust an invisible change to their pixels
+    let info = null;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/level_match_preview?name=` +
+        `${encodeURIComponent(this.name())}&index=${clip.index}`);
+      info = await r.json();
+      if (info.error) throw new Error(info.error);
+    } catch (e) { toast(e.message, true); return; }
+    if (!info.needed) { toast(info.message || "join is already level"); return; }
+    const secs = (info.span / 24).toFixed(1);
+    this.showConfirm(
+      `Join ${clip.index - 1}\u2192${clip.index} steps by ` +
+      `${info.step > 0 ? "+" : ""}${info.step} in brightness` +
+      (info.tau ? `, settling with a time constant of ${info.tau} frames`
+                : "") +
+      `.\n\nOn export, clip ${clip.index}'s opening will be scaled by ` +
+      `${info.gain} decaying to 1.0 over about ${secs}s, so it meets clip ` +
+      `${clip.index - 1}'s level.\n\nYour clips are not modified \u2014 ` +
+      `this only affects the exported master, and any export with a ` +
+      `corrected join is re-encoded rather than stream-copied.`,
+      async () => {
+        try {
+          await post("/h3_suite/project/level_match",
+                     { name: this.name(), index: clip.index, enabled: true });
+          toast(`join ${clip.index - 1}\u2192${clip.index} will be matched`);
+          this._branchBtnIndex = null;
+          this.refresh(true);
+        } catch (e) { toast(e.message, true); }
+      });
   }
 
   branchFrom(index) {
@@ -1078,8 +1142,10 @@ class ProjectModal extends ChainTimeline {
         name: this.name(), include_pending: this._exportPending,
         filename,
       });
+      const lm = (out.level_matched || []).length;
       toast(`${out.preview ? "preview" : "master"} written ` +
-            `(${out.clip_count} clips): ${out.master}`);
+            `(${out.clip_count} clips${lm ? `, ${lm} join` +
+            `${lm === 1 ? "" : "s"} level-matched` : ""}): ${out.master}`);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -1307,10 +1373,12 @@ class ProjectModal extends ChainTimeline {
       // keeps its label and handler in sync as you scrub.
       this.reopenBtn = el("button", { class: "h3p-btn warn",
         text: "Reopen\u2026" });
+      this.levelBtn = el("button", { class: "h3p-btn",
+        text: "Level-match join" });
       this.branchBtn = el("button", { class: "h3p-btn", text: "Branch\u2026",
         title: "copy clips 1..N into a new project and iterate there, " +
                "leaving this one intact" });
-      this.actions.append(this.reopenBtn, this.branchBtn);
+      this.actions.append(this.reopenBtn, this.levelBtn, this.branchBtn);
       this._branchBtnIndex = null;
       this.syncBranchButton();
       this.paintRail(s, name, approved, tail, null);
