@@ -119,9 +119,20 @@ def measure(prev_path, next_path, window=144):
     rgb_gain = 1.0 + (rgb_gain - 1.0) * 0.5 + (gain - 1.0) * 0.5
     fit = _fit_decay(next_path, a_luma, window)
     span = int(min(window, fit[1] * 4)) if fit else 36
+    # how many frames the clip has, so a caller can tell whether the
+    # correction dies out before the clip's tail. If it does not, the
+    # NEXT join is measuring against a level this correction changed.
+    frames = 0
+    with av.open(next_path) as c:
+        st = c.streams.video[0]
+        frames = int(st.frames or 0)
+        if not frames:
+            frames = sum(1 for _ in c.decode(video=0))
     return {"a_luma": a_luma, "b_luma": b_luma, "step": step,
             "gain": float(gain), "rgb_gain": rgb_gain,
-            "tau": (fit[1] if fit else None), "span": span}
+            "tau": (fit[1] if fit else None), "span": span,
+            "frames": frames, "reaches_tail": bool(frames and
+                                                   span >= frames)}
 
 
 def correct(prev_path, next_path, out_path, crf=17, plan=None):

@@ -167,8 +167,26 @@ def _register():
                 raise ProjectError("h3_suite: no join before clip %d."
                                    % index)
             from .level_match import measure
-            plan = measure(p.clip_video_path(clips[index - 2]["basename"]),
-                           p.clip_video_path(clips[index - 1]["basename"]))
+            prev, cur = clips[index - 2], clips[index - 1]
+            plan = measure(p.clip_video_path(prev["basename"]),
+                           p.clip_video_path(cur["basename"]))
+            # if the PREVIOUS join is corrected too, this measurement is
+            # only exact while that correction has faded out before its
+            # clip's tail - which is the level this join measures against
+            chained = None
+            if prev.get("level_match") and index > 2:
+                pprev = clips[index - 3]
+                try:
+                    up = measure(p.clip_video_path(pprev["basename"]),
+                                 p.clip_video_path(prev["basename"]))
+                    if up is not None and up.get("reaches_tail"):
+                        chained = ("clip %d's own correction is still "
+                                   "active at its tail, so this join will "
+                                   "be measured against the corrected "
+                                   "level at export, not the figure shown "
+                                   "here" % prev["index"])
+                except Exception:
+                    pass
         except ProjectError as exc:
             return web.json_response({"error": str(exc)}, status=400)
         except Exception as exc:
@@ -183,6 +201,8 @@ def _register():
             "tau": (round(plan["tau"], 1) if plan["tau"] else None),
             "span": plan["span"],
             "gain": round(plan["gain"], 4),
+            "reaches_tail": plan.get("reaches_tail", False),
+            "chained_note": chained,
         })
 
     @routes.post("/h3_suite/project/purge_trash")

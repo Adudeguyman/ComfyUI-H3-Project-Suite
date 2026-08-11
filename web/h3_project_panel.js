@@ -1054,7 +1054,11 @@ class ProjectModal extends ChainTimeline {
       `${info.gain} decaying to 1.0 over about ${secs}s, so it meets clip ` +
       `${clip.index - 1}'s level.\n\nYour clips are not modified \u2014 ` +
       `this only affects the exported master, and any export with a ` +
-      `corrected join is re-encoded rather than stream-copied.`,
+      `corrected join is re-encoded rather than stream-copied.` +
+      (info.chained_note ? `\n\nNote: ${info.chained_note}.` : "") +
+      (info.reaches_tail ? `\n\nNote: the correction is still fading at ` +
+        `this clip's end, so a level-matched join after it will follow ` +
+        `from the corrected level.` : ""),
       async () => {
         try {
           await post("/h3_suite/project/level_match",
