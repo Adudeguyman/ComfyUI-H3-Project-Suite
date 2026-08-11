@@ -53,8 +53,6 @@ workflow and the whole project layer already used.
 - `tests/seam_level_match.py` writes a joined A+B file with the
   correction applied, and `--also-plain` writes the same join without
   it for comparison.
-- `tests/motion_describe.py` reads a clip's ending camera motion and
-  prints it in the guide's prompt vocabulary.
 
 ### Compatibility
 
