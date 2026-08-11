@@ -281,6 +281,19 @@ class H3Context:
                                "clip, which the model imitates (similar "
                                "music, not phase-locked) rather than "
                                "continues."}),
+                "video_source": (["frames", "latent"], {
+                    "default": "frames",
+                    "tooltip": "frames: pin decoded frames from "
+                               "context_frames (one VAE encode; each link "
+                               "adds a decode/encode round trip, which "
+                               "drifts color slightly down a chain). "
+                               "latent: EXPERIMENTAL - slice the pinned "
+                               "video straight from context_latent's tail, "
+                               "no VAE round trip at all, matching what the "
+                               "audio already does. Needs context_latent "
+                               "wired and the same resolution as the new "
+                               "clip; context_frames and encode_mode are "
+                               "ignored."}),
                 "seed_head": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "EXPERIMENTAL, latent path only. Also write "
@@ -298,19 +311,6 @@ class H3Context:
                                "keeps it exactly; lower values let the "
                                "model repaint it slightly, which can ease "
                                "the release at the boundary."}),
-                "video_source": (["frames", "latent"], {
-                    "default": "frames",
-                    "tooltip": "frames: pin decoded frames from "
-                               "context_frames (one VAE encode; each link "
-                               "adds a decode/encode round trip, which "
-                               "drifts color slightly down a chain). "
-                               "latent: EXPERIMENTAL - slice the pinned "
-                               "video straight from context_latent's tail, "
-                               "no VAE round trip at all, matching what the "
-                               "audio already does. Needs context_latent "
-                               "wired and the same resolution as the new "
-                               "clip; context_frames and encode_mode are "
-                               "ignored."}),
             },
             "optional": {
                 "vae": ("VAE", {

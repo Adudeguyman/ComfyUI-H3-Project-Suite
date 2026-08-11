@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.1.0
+
+### Levelling a join
+
+A chained clip can open slightly brighter than the one before it and
+settle back over a second or so - the model relaxing toward its own
+exposure once it stops being held to the previous clip. **Level-match
+join** measures that step, tells you what it found, and corrects it on
+export.
+
+- Per join, not per project: joins differ, and a global switch would
+  correct seams that were never broken.
+- Measures before you commit and reports the step, the settle time and
+  the gain it would apply.
+- Your clips are never modified; only the exported master. An export
+  containing a corrected join is re-encoded rather than stream-copied.
+- Refuses steps beyond 35%, which are cuts or intended lighting changes
+  rather than seam artifacts.
+- Consecutive corrected joins do not compound, and the export says so
+  when one correction is still active at its clip's tail.
+
+### Seeing what you are watching
+
+- The playhead now names the take, not just the clip: `clip 7 - take
+  9/11`, plus `pending` or `levelled` when they apply. Hovering gives
+  the basename and what the clip continues from.
+
+### seed_head (experimental)
+
+`H3 Context` gains a third output, `latent`, and a `seed_head` toggle.
+With it on, the pinned steps are written into the clip's starting latent
+and held there during sampling, so the sampler's trajectory begins from
+the previous clip's state rather than from noise merely conditioned
+toward it. **Wire the node's latent output into the sampler to use it.**
+Off by default, and a passthrough when off.
+
+`head_hold` controls how firmly the seeded head is held; lower values
+let the model repaint it slightly.
+
+### Diagnostics
+
+- `tests/video_seam_probe.py` classifies a join as duplicate, skip,
+  drift, flash or clean, measured against the motion already present.
+- `tests/seam_level_match.py` writes a joined A+B file with the
+  correction applied, and `--also-plain` writes the same join without
+  it for comparison.
+- `tests/motion_describe.py` reads a clip's ending camera motion and
+  prints it in the guide's prompt vocabulary.
+
+### Compatibility
+
+`seed_head` and `head_hold` are appended after the existing widgets, so
+saved workflows keep their values.
+
 ## 1.0.0
 
 First release of the project suite. Everything below is on top of the

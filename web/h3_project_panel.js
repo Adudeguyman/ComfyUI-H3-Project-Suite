@@ -74,6 +74,9 @@ const CSS = `
 .h3p-time{font-family:ui-monospace,monospace;font-size:11px;color:#8a93a3;
   white-space:nowrap;flex:0 0 auto;}
 .h3p-time b{color:#d7dbe2;font-weight:400;}
+.h3p-where{font-family:ui-monospace,monospace;font-size:11px;color:#8a93a3;
+  padding:2px 0 0 46px;min-height:14px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;}
 .h3p-scrub{position:relative;flex:1;height:26px;cursor:pointer;
   display:flex;align-items:center;}
 .h3p-track{position:absolute;inset:6px 0;display:flex;gap:2px;}
@@ -255,9 +258,11 @@ class ChainTimeline {
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     };
+    this.whereEl = el("div", { class: "h3p-where" });
     this.transport = el("div", { class: "h3p-transport" },
       el("div", { class: "h3p-tbar" }, this.playBtn, this.timeEl,
-         this.scrub));
+         this.scrub),
+      this.whereEl);
     this.confirmMsg = el("div", { class: "msg" });
     this.confirmBtns = el("div", { style: "display:flex;gap:8px;" +
                                           "flex-wrap:wrap" });
@@ -445,9 +450,32 @@ class ChainTimeline {
       return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`;
     };
     const seg = this.timeline?.[this.curSeg];
-    this.timeEl.innerHTML =
-      `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}` +
-      (seg ? ` \u00b7 clip ${seg.clip.index}` : "");
+    // which take is actually in the chain here, not just which clip:
+    // after a few re-rolls "clip 7" is ambiguous, and the take number is
+    // what ties what you are watching back to a file on disk
+    let where = "";
+    if (seg) {
+      const c = seg.clip;
+      const n = (c.takes || []).length;
+      where = ` \u00b7 clip ${c.index}`;
+      if (c.take != null) {
+        where += ` \u00b7 take ${c.take}`;
+        if (n > 1) where += `/${n}`;
+      }
+      if (c.status && c.status !== "approved") {
+        where += ` \u00b7 ${c.status}`;
+      }
+      if (c.level_match) where += " \u00b7 levelled";
+    }
+    this.timeEl.innerHTML = `<b>${fmt(now)}</b> / ${fmt(this.total || 0)}`;
+    if (this.whereEl) {
+      this.whereEl.textContent = where ? where.replace(/^ \u00b7 /, "") : "";
+      this.whereEl.title = seg
+        ? `${seg.clip.basename}` +
+          (seg.clip.from ? `\ncontinues ${seg.clip.from}` : "") +
+          `\nstarts at ${fmt(seg.start)} of ${fmt(this.total || 0)}`
+        : "";
+    }
     this.playBtn.textContent = this.video.paused ? "\u25b6" : "\u2758\u2758";
     this.syncBranchButton?.();
   }
