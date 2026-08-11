@@ -281,6 +281,23 @@ class H3Context:
                                "clip, which the model imitates (similar "
                                "music, not phase-locked) rather than "
                                "continues."}),
+                "seed_head": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "EXPERIMENTAL, latent path only. Also write "
+                               "the pinned steps INTO the clip's starting "
+                               "latent and hold them there while sampling "
+                               "(temporal inpainting), so the sampler's "
+                               "trajectory starts from the previous clip's "
+                               "actual state instead of noise that is "
+                               "merely conditioned toward it. Wire this "
+                               "node's latent OUTPUT into the sampler for "
+                               "this to take effect."}),
+                "head_hold": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": "How firmly the seeded head is held. 1.0 "
+                               "keeps it exactly; lower values let the "
+                               "model repaint it slightly, which can ease "
+                               "the release at the boundary."}),
                 "video_source": (["frames", "latent"], {
                     "default": "frames",
                     "tooltip": "frames: pin decoded frames from "
@@ -333,8 +350,15 @@ class H3Context:
             },
         }
 
-    RETURN_TYPES = ("CONDITIONING", "INT")
-    RETURN_NAMES = ("conditioning", "trim_frames")
+    RETURN_TYPES = ("CONDITIONING", "INT", "LATENT")
+    RETURN_NAMES = ("conditioning", "trim_frames", "latent")
+    OUTPUT_TOOLTIPS = (
+        "conditioning with the pinned context applied",
+        "frames of re-tread for H3 Context Trim",
+        "the clip's latent, passed through - or, with seed_head on, "
+        "seeded at its head with the pinned steps and carrying a noise "
+        "mask that holds them during sampling. Wire THIS into the "
+        "sampler when seeding; otherwise it is identical to the input.")
     FUNCTION = "apply"
     CATEGORY = "conditioning/minimax"
     DESCRIPTION = ("Pin a run of consecutive frames from a previous clip as "
@@ -487,13 +511,15 @@ class H3Context:
         _LOG.info("h3_suite: pinned video sliced from context_latent: steps "
                   "%d..%d (%d frames), no VAE round trip", k0, total - 1,
                   covered)
+        self._last_pin = (ctx, k0, steps)
         return blocks, offsets, covered
 
     def apply(self, conditioning, latent, context_length,
               encode_mode, anchor_mode, crop, audio_context_length=22,
               audio_mode="timeline", video_source="frames", vae=None,
               context_frames=None, context_latent=None, audio_vae=None,
-              context_audio=None, enabled=True):
+              context_audio=None, enabled=True, seed_head=False,
+              head_hold=1.0):
         context_length = int(context_length)
         if enabled is False:
             # inert passthrough: conditioning untouched, trim 0 makes the
@@ -502,7 +528,7 @@ class H3Context:
             # on this path - a disabled chain leaves ComfyUI stock.
             _LOG.info("h3_suite: motion context disabled (chain inactive); "
                       "passing conditioning through untouched")
-            return (conditioning, 0)
+            return (conditioning, 0, latent)
         _activate_inline_patches()
 
         video = _video_from_latent(latent)
@@ -626,7 +652,48 @@ class H3Context:
                       % float(ref.get(MC_AUDIO_KEY))
                       if audio_mode == "timeline" else "stock ref placement"))
                   if ref_audio_t else "off")
-        return (out, trim)
+        out_latent = latent
+        if seed_head and video_source == "latent":
+            out_latent = self._seed_head_latent(latent, float(head_hold))
+        elif seed_head:
+            _LOG.warning("h3_suite: seed_head only works on the latent "
+                         "path; ignoring it for video_source='frames'")
+        return (out, trim, out_latent)
+
+    def _seed_head_latent(self, latent, head_hold):
+        """Write the pinned steps into the clip latent's head and attach
+        a noise mask that holds them during sampling.
+
+        ComfyUI's sampler re-noises masked regions to the current sigma
+        each step (temporal inpainting), so the held head rides the
+        schedule as the previous clip's content rather than being merely
+        conditioned toward it. A non-nested mask applies to the VIDEO
+        part; the sampler pads the audio part with ones, so audio keeps
+        denoising freely - its continuity is already handled on the
+        timeline."""
+        import torch
+        ctx, k0, steps = getattr(self, "_last_pin", (None, 0, 0))
+        if ctx is None or steps <= 0:
+            return latent
+        samples = latent["samples"]
+        parts = list(samples.unbind())
+        video = parts[0].clone()
+        # the pinned tail becomes the clip's opening, step for step
+        video[:, :, 0:steps] = ctx[:, :, k0:k0 + steps]
+        parts[0] = video
+        mask = torch.ones(
+            (int(video.shape[0]), 1, int(video.shape[2]),
+             int(video.shape[3]), int(video.shape[4])),
+            dtype=torch.float32)
+        # mask semantics: 1 = denoise freely, 0 = hold to the latent
+        mask[:, :, 0:steps] = 1.0 - head_hold
+        out = dict(latent)
+        out["samples"] = type(samples)(parts)
+        out["noise_mask"] = mask
+        _LOG.info("h3_suite: seeded %d head steps from the previous tail, "
+                  "hold %.2f; wire this node's latent output into the "
+                  "sampler", steps, head_hold)
+        return out
 
 
 class H3ContextTrim:

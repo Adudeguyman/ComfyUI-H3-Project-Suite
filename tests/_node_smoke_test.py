@@ -37,6 +37,9 @@ class T:
     def __getitem__(self, idx):
         return T(self.a[idx])
 
+    def __setitem__(self, idx, value):
+        self.a[idx] = value.a if isinstance(value, T) else value
+
     def movedim(self, src, dst):
         return T(np.moveaxis(self.a, src, dst))
 
@@ -188,7 +191,7 @@ def main():
          "audio_latent": T(np.zeros((1, 32, 2, 3), dtype=np.float32))},
     ]
     r2v_conditioning = [["c", {"minimax_refs": r2v_refs}]]
-    out, trim = node.apply(
+    out, trim, _lat = node.apply(
         conditioning=r2v_conditioning, vae=VAE(), latent=target,
         context_frames=context, context_length=22, encode_mode="video",
         anchor_mode="head", crop="disabled", audio_context_length=22,
@@ -257,7 +260,7 @@ def main():
                     ).reshape(1, 16, latent_t, h, w)),
         prev["samples"].parts[1],
     ])}
-    out3, trim3 = node.apply(
+    out3, trim3, _l3 = node.apply(
         conditioning=[["c", {}]], vae=ForbiddenVAE(), latent=target,
         context_length=22, encode_mode="video", anchor_mode="head",
         crop="disabled", audio_context_length=22, audio_mode="timeline",
@@ -278,7 +281,7 @@ def main():
 
     # the latent path must work with NO vae wired at all
     captured.clear()
-    out4, trim4 = node.apply(
+    out4, trim4, _l4 = node.apply(
         conditioning=[["c", {}]], latent=target,
         context_length=22, encode_mode="video", anchor_mode="head",
         crop="disabled", audio_context_length=22, audio_mode="timeline",
@@ -312,7 +315,7 @@ def main():
         T(np.zeros((1, 32, 2, at56), dtype=np.float32)),
     ])}
     captured.clear()
-    out56, trim56 = node.apply(
+    out56, trim56, _l56 = node.apply(
         conditioning=[["c", {}]], latent=tgt56,
         context_length=56, encode_mode="video", anchor_mode="head",
         crop="disabled", audio_context_length=56, audio_mode="timeline",
@@ -432,6 +435,51 @@ def main():
         raise AssertionError("auto-numbered file was matched by index")
     print("indexed slots: re-roll overwrites its slot, loads previous "
           "clip's latent; auto mode confirmed to return the reject")
+
+    # --- seed_head: the latent output carries the pinned steps + mask ---
+    node2 = nodes.H3Context()
+    prev2 = {"samples": Nested([
+        T(np.arange(1 * 16 * latent_t * h * w, dtype=np.float32
+                    ).reshape(1, 16, latent_t, h, w) % 331),
+        T(np.zeros((1, 32, 2, audio_t), dtype=np.float32)),
+    ])}
+    tgt2 = {"samples": Nested([
+        T(np.zeros((1, 16, latent_t, h, w), dtype=np.float32)),
+        T(np.zeros((1, 32, 2, audio_t), dtype=np.float32)),
+    ])}
+    outc, trim_s, seeded = node2.apply(
+        conditioning=[["c", {}]], latent=tgt2, context_length=22,
+        encode_mode="video", anchor_mode="head", crop="disabled",
+        audio_mode="off", video_source="latent", context_latent=prev2,
+        seed_head=True, head_hold=1.0)
+    assert seeded is not tgt2, "seed_head must return a NEW latent dict"
+    sv = seeded["samples"].unbind()[0]
+    pv = prev2["samples"].unbind()[0]
+    steps = 7   # 22 frames = 7 latent steps
+    k0 = pv.shape[2] - steps
+    assert np.array_equal(sv.a[:, :, 0:steps], pv.a[:, :, k0:]), \
+        "head steps must equal the previous tail's steps"
+    assert float(np.abs(sv.a[:, :, steps:]).sum()) == 0.0, \
+        "steps past the head must stay empty"
+    m = seeded["noise_mask"]
+    assert m.shape[2] == sv.shape[2] and m.shape[1] == 1, m.shape
+    assert float(m.a[:, :, 0:steps].max()) == 0.0, \
+        "held head must have mask 0 (hold) at hold=1.0"
+    assert float(m.a[:, :, steps:].min()) == 1.0, \
+        "free region must have mask 1"
+    # the passthrough case: no seeding, identical object back
+    tgt3 = {"samples": Nested([
+        T(np.zeros((1, 16, latent_t, h, w), dtype=np.float32)),
+        T(np.zeros((1, 32, 2, audio_t), dtype=np.float32)),
+    ])}
+    _, _, plain = node2.apply(
+        conditioning=[["c", {}]], latent=tgt3,
+        context_length=22, encode_mode="video", anchor_mode="head",
+        crop="disabled", audio_mode="off", video_source="latent",
+        context_latent=prev2, seed_head=False)
+    assert "noise_mask" not in plain, "no mask unless seeding"
+    print("seed_head: head steps copied, mask holds them, passthrough "
+          "clean")
 
     print("smoke test passed")
 

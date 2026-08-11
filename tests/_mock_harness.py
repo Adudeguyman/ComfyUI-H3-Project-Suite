@@ -105,6 +105,12 @@ def make_mm(ref_advance_factor=1.0):
 def make_torch():
     t = types.ModuleType("torch")
     t.equal = lambda a, b: a.shape == b.shape and bool(np.array_equal(a, b))
+    t.float32 = np.float32
+
+    def _ones(shape, dtype=np.float32):
+        from _node_smoke_test import T as _T  # the shared tensor fake
+        return _T(np.ones(shape, dtype=np.float32))
+    t.ones = _ones
     return t
 
 

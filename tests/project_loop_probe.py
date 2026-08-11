@@ -150,7 +150,7 @@ def main():
 
     # ---- 2: enabled=False is a true passthrough ----
     cond_in = [["c", {"minimax_refs": [{"kind": "image"}]}]]
-    out_cond, trim = ctx_node.apply(
+    out_cond, trim, _lat = ctx_node.apply(
         conditioning=cond_in, vae=None, latent=None, context_length=22,
         encode_mode="video", anchor_mode="head", crop="disabled",
         audio_context_length=22, audio_mode="timeline",
@@ -224,7 +224,7 @@ def main():
 
     # ---- 6: chain node pins video+audio from that context ----
     captured.clear()
-    out_cond, trim = ctx_node.apply(
+    out_cond, trim, _lat = ctx_node.apply(
         conditioning=[["c", {}]], vae=None, latent=fresh_latent(0.0),
         context_length=22, encode_mode="video", anchor_mode="head",
         crop="disabled", audio_context_length=22, audio_mode="timeline",
