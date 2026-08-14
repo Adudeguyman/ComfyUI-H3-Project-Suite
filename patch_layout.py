@@ -214,8 +214,12 @@ def _fixup_audio(layout, text_len, refs):
 
 def _patched_init(self, text_len, latent_t, latent_h, latent_w, audio_t,
                   keyframes=None, refs=None, frame_count=None):
-    _orig_init(self, text_len, latent_t, latent_h, latent_w, audio_t,
-               keyframes=keyframes, refs=refs, frame_count=frame_count)
+    # forward frame_count only when the thing underneath takes it: another
+    # pack may have replaced it with a narrower signature
+    kw = {"keyframes": keyframes, "refs": refs}
+    if _accepts(_orig_init, "frame_count"):
+        kw["frame_count"] = frame_count
+    _orig_init(self, text_len, latent_t, latent_h, latent_w, audio_t, **kw)
     has_mc_kf = bool(keyframes) and any(
         kf.get(MC_KEY) is not None for kf in keyframes)
     has_mc_audio = bool(refs) and any(
@@ -237,6 +241,10 @@ def _self_test():
     """
     text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
     frame_count = sum(mm.FRAME_PER_TOKEN[k % 5] for k in range(latent_t))
+    # a third-party patch may have narrowed the signature; build the extra
+    # kwargs once so every call below agrees with what is installed
+    _fc = {"frame_count": frame_count} if _accepts(_orig_init,
+                                                   "frame_count") else {}
 
     stock_kf = [{"resolved_frame_index": 0},
                 {"resolved_frame_index": frame_count - 1}]
@@ -245,11 +253,11 @@ def _self_test():
 
     a = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(a, text_len, latent_t, lh, lw, audio_t,
-               keyframes=stock_kf, frame_count=frame_count)
+               keyframes=stock_kf, **_fc)
 
     b = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(b, text_len, latent_t, lh, lw, audio_t,
-               keyframes=ours_kf, frame_count=frame_count)
+               keyframes=ours_kf, **_fc)
     _fixup(b, text_len, latent_t, frame_count, ours_kf)
 
     if a.position_ids.shape != b.position_ids.shape:
@@ -263,7 +271,7 @@ def _self_test():
     run = [{"resolved_frame_index": 0, MC_KEY: i} for i in range(4)]
     c = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(c, text_len, latent_t, lh, lw, audio_t,
-               keyframes=run, frame_count=frame_count)
+               keyframes=run, **_fc)
     _fixup(c, text_len, latent_t, frame_count, run)
     ts = [float(c.position_ids[s, 0]) for s, _, k in c.segments if k == "cond"]
     if len(ts) != len(run):
@@ -288,7 +296,7 @@ def _self_test():
     ref = [{"kind": "audio", "ref_audio_t": 8}]
     d = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(d, text_len, latent_t, lh, lw, audio_t,
-               keyframes=run, refs=ref, frame_count=frame_count)
+               keyframes=run, refs=ref, **_fc)
     _fixup(d, text_len, latent_t, frame_count, run, refs=ref)
     ts_ref = [float(d.position_ids[s, 0]) for s, _, k in d.segments if k == "cond"]
     if len(ts_ref) != len(ts):
@@ -317,7 +325,7 @@ def _self_test():
     ref_mc = [{"kind": "audio", "ref_audio_t": rt, MC_AUDIO_KEY: end_frame}]
     e = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(e, text_len, latent_t, lh, lw, audio_t,
-               keyframes=run, refs=ref_mc, frame_count=frame_count)
+               keyframes=run, refs=ref_mc, **_fc)
     _fixup(e, text_len, latent_t, frame_count, run, refs=ref_mc)
     _fixup_audio(e, text_len, ref_mc)
     if e.position_ids.shape != d.position_ids.shape:
@@ -361,12 +369,12 @@ def _self_test():
 
     f = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(f, text_len, latent_t, lh, lw, audio_t,
-               keyframes=run, refs=refs_plain, frame_count=frame_count)
+               keyframes=run, refs=refs_plain, **_fc)
     _fixup(f, text_len, latent_t, frame_count, run, refs=refs_plain)
 
     g = mm.PackedLayout.__new__(mm.PackedLayout)
     _orig_init(g, text_len, latent_t, lh, lw, audio_t,
-               keyframes=run, refs=refs_marked, frame_count=frame_count)
+               keyframes=run, refs=refs_marked, **_fc)
     _fixup(g, text_len, latent_t, frame_count, run, refs=refs_marked)
     _fixup_audio(g, text_len, refs_marked)
 
@@ -406,6 +414,36 @@ def _self_test():
             "amount: %s vs %.6f" % (multi_deltas[:4], want_multi_shift))
 
 
+def _init_owner(fn=None):
+    """Describe whoever currently owns PackedLayout.__init__.
+
+    Another custom node may have wrapped it before we look. When that
+    wrapper has a different signature, everything downstream fails in a
+    way that reads like a ComfyUI change, so name the real owner rather
+    than leaving the user to guess between packs.
+    """
+    fn = fn or mm.PackedLayout.__init__
+    mod = getattr(fn, "__module__", None) or "?"
+    qual = getattr(fn, "__qualname__", getattr(fn, "__name__", "?"))
+    stock = mod == getattr(mm, "__name__", "comfy.ldm.minimax.model")
+    return mod, qual, stock
+
+
+def _accepts(fn, name):
+    """Does this callable take a keyword argument called `name`?"""
+    try:
+        import inspect
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return True   # unintrospectable: assume yes, the call will tell us
+    for p in sig.parameters.values():
+        if p.kind is p.VAR_KEYWORD:
+            return True
+        if p.name == name:
+            return True
+    return False
+
+
 def _core_handles_interior_anchors():
     """Does stock already place an interior anchor correctly?
 
@@ -429,8 +467,11 @@ def _core_handles_interior_anchors():
               {"resolved_frame_index": mid},
               {"resolved_frame_index": frame_count - 1}]
         probe = mm.PackedLayout.__new__(mm.PackedLayout)
+        kw = {"keyframes": kf}
+        if _accepts(mm.PackedLayout.__init__, "frame_count"):
+            kw["frame_count"] = frame_count
         mm.PackedLayout.__init__(probe, text_len, latent_t, lh, lw, audio_t,
-                                 keyframes=kf, frame_count=frame_count)
+                                 **kw)
         ts = [float(probe.position_ids[a, 0])
               for a, _b, kind in probe.segments if kind == "cond"]
         if len(ts) != 3:
@@ -454,6 +495,19 @@ def apply_patch():
                   "alone")
         return False
     _orig_init = mm.PackedLayout.__init__
+    mod, qual, stock = _init_owner(_orig_init)
+    if not stock:
+        _LOG.warning(
+            "h3_suite: PackedLayout.__init__ is not ComfyUI's own - it is "
+            "%s from %s. Another custom node has patched it. Ours builds on "
+            "top of whatever is installed, so if the self-test below fails, "
+            "that pack is the thing to disable first.", qual, mod)
+    if not _accepts(_orig_init, "frame_count"):
+        _LOG.warning(
+            "h3_suite: the installed PackedLayout.__init__ (%s from %s) does "
+            "not accept frame_count, which stock ComfyUI 0.31-0.33 does. "
+            "This is a third-party patch with a narrower signature; the "
+            "last-frame anchor cannot be verified against it.", qual, mod)
     try:
         _self_test()
     except Exception as exc:
