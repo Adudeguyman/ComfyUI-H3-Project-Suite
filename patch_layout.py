@@ -445,29 +445,35 @@ def _accepts(fn, name):
 
 
 def _core_handles_interior_anchors():
-    """Does stock already place an interior anchor correctly?
+    """Does this ComfyUI already place an interior anchor correctly?
 
-    ComfyUI PR #15439 merged upstream on 2026-08-13 and does what this
-    module does: it removes the first/last restriction outright. On such
-    a core our rewrite is not just unnecessary, it would shift positions
-    stock has already placed. Detection is behavioural rather than a
-    version check, because a version number cannot tell us whether a
-    given build carries the change.
+    PR #15439 merged upstream on 2026-08-13 and does what this module
+    does: it removes the first/last restriction. On such a core our
+    rewrite is not merely unnecessary, it would shift positions core has
+    already placed. Detection is behavioural rather than a version check,
+    because a version string cannot tell us whether a given build carries
+    the change - the 0.33.0 tag does not, but a master checkout calling
+    itself 0.33.0 does.
 
-    Returns True only when stock ACCEPTS an interior anchor AND lands it
-    strictly between the endpoints. Anything else - a raise, a wrong
-    coordinate, an unexpected error - returns False and we patch as
-    before.
+    Returns True only when core ACCEPTS three anchors and lands them in
+    strictly increasing order. Anything else returns False and we patch
+    as before.
     """
     text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
     try:
         frame_count = sum(mm.FRAME_PER_TOKEN[k % 5] for k in range(latent_t))
         mid = frame_count // 2
-        kf = [{"resolved_frame_index": 0},
-              {"resolved_frame_index": mid},
-              {"resolved_frame_index": frame_count - 1}]
+
+        def kf(idx):
+            # a keyframe only produces cond rows when it carries a latent:
+            # master sizes the block from the latent's own temporal extent
+            # instead of assuming a single frame, so a bare index dict
+            # yields no rows and would read as a failure to place it
+            return {"resolved_frame_index": idx,
+                    "latent": torch.zeros(1, 16, 1, lh, lw)}
+
         probe = mm.PackedLayout.__new__(mm.PackedLayout)
-        kw = {"keyframes": kf}
+        kw = {"keyframes": [kf(0), kf(mid), kf(frame_count - 1)]}
         if _accepts(mm.PackedLayout.__init__, "frame_count"):
             kw["frame_count"] = frame_count
         mm.PackedLayout.__init__(probe, text_len, latent_t, lh, lw, audio_t,
@@ -477,7 +483,8 @@ def _core_handles_interior_anchors():
         if len(ts) != 3:
             return False
         return ts[0] < ts[1] < ts[2]
-    except Exception:
+    except Exception as exc:
+        _LOG.debug("h3_suite: interior-anchor probe inconclusive (%s)", exc)
         return False
 
 

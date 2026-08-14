@@ -111,6 +111,13 @@ def make_torch():
         from _node_smoke_test import T as _T  # the shared tensor fake
         return _T(np.ones(shape, dtype=np.float32))
     t.ones = _ones
+
+    def _zeros(*shape, **kw):
+        from _node_smoke_test import T as _T
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        return _T(np.zeros(shape, dtype=np.float32))
+    t.zeros = _zeros
     return t
 
 

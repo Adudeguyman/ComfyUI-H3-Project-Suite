@@ -42,36 +42,48 @@ def fresh_patch_layout():
 
 
 def make_new_core_mm():
-    """A PackedLayout that accepts interior anchors, as merged core does."""
+    """A PackedLayout that behaves like ComfyUI master after PR #15439.
+
+    Three things changed there and each one can fool a naive probe:
+      - `frame_count` is gone from the signature
+      - a keyframe only produces cond rows when it carries a latent, and
+        the block is sized from that latent's own temporal extent
+      - anchors count from a cursor that already includes the refs
+    """
     mm = make_mm()
     orig = mm.PackedLayout.__init__
 
-    def permissive_init(self, text_len, latent_t, lh, lw, audio_t,
-                        keyframes=None, refs=None, frame_count=None,
-                        **kw):
-        kfs = keyframes or []
-        interior = [k for k in kfs
-                    if 0 < int(k.get("resolved_frame_index", 0))
-                    < (frame_count or 1) - 1]
-        if not interior:
-            return orig(self, text_len, latent_t, lh, lw, audio_t,
-                        keyframes=keyframes, refs=refs,
-                        frame_count=frame_count, **kw)
-        # place every anchor at its own coordinate, which is what the
-        # merged PR does
-        stub = [dict(k) for k in kfs]
+    def merged_init(self, text_len, latent_t, lh, lw, audio_t,
+                    keyframes=None, refs=None, **kw):
+        stub = [dict(k) for k in (keyframes or [])]
         for k in stub:
             k["resolved_frame_index"] = 0
-        orig(self, text_len, latent_t, lh, lw, audio_t, keyframes=stub,
-             refs=refs, frame_count=frame_count, **kw)
+        orig(self, text_len, latent_t, lh, lw, audio_t,
+             keyframes=stub or None, refs=refs)
         conds = [(a, b) for a, b, kind in self.segments if kind == "cond"]
-        for (a, b), k in zip(conds, kfs):
-            t = float(text_len) + mm.FRAME_RESCALE * \
-                float(k.get("resolved_frame_index", 0))
+        cursor = float(text_len)
+        placed = 0
+        for (a, b), k in zip(conds, keyframes or []):
+            if k.get("latent") is None:
+                continue          # no latent, no rows - as master does
+            t = cursor + mm.FRAME_RESCALE * float(
+                k.get("resolved_frame_index", 0))
             self.position_ids[a:b, 0] = t
+            placed += 1
+        # drop any cond segments the caller did not supply a latent for
+        if placed < len(conds):
+            keep, seen = [], 0
+            for a, b, kind in self.segments:
+                if kind == "cond":
+                    if seen >= placed:
+                        seen += 1
+                        continue
+                    seen += 1
+                keep.append((a, b, kind))
+            self.segments = keep
         return None
 
-    mm.PackedLayout.__init__ = permissive_init
+    mm.PackedLayout.__init__ = merged_init
     return mm
 
 
