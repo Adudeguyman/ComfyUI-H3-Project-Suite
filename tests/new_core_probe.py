@@ -95,22 +95,66 @@ def main():
     assert pl.is_applied() is True
     print("1. old core: patch installed, interior anchors enabled")
 
-    # --- a NEW core: the patch must decline ---
+    # --- a NEW core: video stands down, audio placement stays ours ---
     install(make_new_core_mm())
     pl2 = fresh_patch_layout()
     assert pl2._core_handles_interior_anchors() is True, \
         "detection failed to notice core handles interior anchors"
-    assert pl2.apply_patch() is False, "patch must NOT install on a fixed core"
-    assert pl2.is_applied() is False
-    print("2. new core: patch declined and left core alone")
+    assert pl2.apply_patch() is True, \
+        "patch must install in audio_only mode on a fixed core"
+    assert pl2.is_applied() is True and pl2._mode == "audio_only"
+    print("2. new core: audio_only mode - core keeps video, we keep audio")
 
-    # --- and core is genuinely untouched afterwards ---
+    # video: a marked pinned run must land exactly where CORE puts it,
+    # untouched by our fixup
     mmnew = sys.modules["comfy.ldm.minimax.model"]
-    before = mmnew.PackedLayout.__init__
-    pl2.apply_patch()
-    assert mmnew.PackedLayout.__init__ is before, \
-        "declining must not replace __init__"
-    print("3. new core: PackedLayout.__init__ is still core's own")
+    import torch
+    text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
+    fc = sum(mmnew.FRAME_PER_TOKEN[k % 5] for k in range(latent_t))
+    def kf(i, marked):
+        d = {"resolved_frame_index": i,
+             "latent": torch.zeros(1, 16, 1, lh, lw)}
+        if marked:
+            d[pl2.MC_KEY] = True
+        return d
+    plain = mmnew.PackedLayout.__new__(mmnew.PackedLayout)
+    # core's own placement, no markers -> wrapper passes through untouched
+    mmnew.PackedLayout.__init__(plain, text_len, latent_t, lh, lw, audio_t,
+                                keyframes=[kf(0, False), kf(fc // 2, False),
+                                           kf(fc - 1, False)])
+    ours = mmnew.PackedLayout.__new__(mmnew.PackedLayout)
+    mmnew.PackedLayout.__init__(ours, text_len, latent_t, lh, lw, audio_t,
+                                keyframes=[kf(0, True), kf(fc // 2, True),
+                                           kf(fc - 1, True)])
+    tp = [float(plain.position_ids[a, 0])
+          for a, _b, k in plain.segments if k == "cond"]
+    to = [float(ours.position_ids[a, 0])
+          for a, _b, k in ours.segments if k == "cond"]
+    assert tp == to, "audio_only mode must not move video anchors: %s vs %s" \
+        % (tp, to)
+    print("3. new core: marked video anchors identical to core's own %s"
+          % tp)
+
+    # audio: a marked audio ref must still be translated onto the timeline
+    end_frame, rt = 4, 8
+    ref_mc = [{"kind": "audio", "ref_audio_t": rt,
+               pl2.MC_AUDIO_KEY: end_frame}]
+    base = mmnew.PackedLayout.__new__(mmnew.PackedLayout)
+    pl2._orig_init(base, text_len, latent_t, lh, lw, audio_t,
+                   keyframes=[kf(0, False)], refs=ref_mc)
+    moved_l = mmnew.PackedLayout.__new__(mmnew.PackedLayout)
+    mmnew.PackedLayout.__init__(moved_l, text_len, latent_t, lh, lw,
+                                audio_t, keyframes=[kf(0, False)],
+                                refs=ref_mc)
+    tb = base.position_ids[:, 0]
+    tm = moved_l.position_ids[:, 0]
+    moved_rows = [i for i in range(len(tb))
+                  if float(tb[i]) != float(tm[i])]
+    assert moved_rows, "marked audio ref was not translated on new core"
+    deltas = {round(float(tm[i]) - float(tb[i]), 5) for i in moved_rows}
+    assert len(deltas) == 1, "non-uniform audio shift: %s" % deltas
+    print("4. new core: marked audio ref translated by %.3f, %d rows"
+          % (deltas.pop(), len(moved_rows)))
 
     # --- payload: defers when core already concatenated ---
     sys.modules.pop("patch_payload", None)
@@ -147,7 +191,7 @@ def main():
     got = inst.extra_conds(minimax_keyframes=kf, minimax_refs=rf)
     vals = got["minimax_payload"].cond["cond_video_latents"]
     assert vals == ["K1", "K2", "R1"], vals
-    print("4. old core: keyframes restored ahead of refs -> %s" % vals)
+    print("5. old core: keyframes restored ahead of refs -> %s" % vals)
 
     # new core already concatenated; the patch must leave it alone.
     # Wrap the ORIGINAL, not the patched method, or the patch calls the
@@ -175,7 +219,7 @@ def main():
     assert vals2 == ["K1", "K2", "R1"], vals2
     assert Recording.writes == [], \
         "patch rewrote %s on a fixed core" % Recording.writes
-    print("5. new core: payload left exactly as core built it, no writes "
+    print("6. new core: payload left exactly as core built it, no writes "
           "-> %s" % vals2)
 
     print("all checks passed")

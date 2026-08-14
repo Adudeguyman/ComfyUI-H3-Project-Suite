@@ -47,6 +47,7 @@ _LOG = logging.getLogger("h3_suite")
 
 _orig_init = None
 _applied = False
+_mode = None      # "full" | "audio_only" once applied
 
 
 def _ref_cursor_advance(refs):
@@ -224,7 +225,9 @@ def _patched_init(self, text_len, latent_t, latent_h, latent_w, audio_t,
         kf.get(MC_KEY) is not None for kf in keyframes)
     has_mc_audio = bool(refs) and any(
         r.get(MC_AUDIO_KEY) is not None for r in refs)
-    if has_mc_kf:
+    if has_mc_kf and _mode != "audio_only":
+        # in audio_only mode core has already placed every anchor at its
+        # own coordinate; repositioning them again would double-shift
         _fixup(self, text_len, latent_t, frame_count, keyframes, refs)
     if has_mc_audio:
         _fixup_audio(self, text_len, refs)
@@ -488,8 +491,57 @@ def _core_handles_interior_anchors():
         return False
 
 
+def _audio_self_test():
+    """Prove the audio timeline translation on THIS core, alone.
+
+    On a core with PR #15439 the full self-test does not apply - it
+    verifies our video-anchor rewrite against old-core behaviour. But the
+    audio translation is this pack's own mechanism regardless of core,
+    so it gets its own proof: build one layout with a marked audio ref,
+    translate it, and require exactly the ref's rows to have moved, all
+    by one uniform shift, everything else bit-identical.
+    """
+    import torch
+    text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
+    end_frame, rt = 4, 8
+    kf = [{"resolved_frame_index": 0,
+           "latent": torch.zeros(1, 16, 1, lh, lw)}]
+    ref_mc = [{"kind": "audio", "ref_audio_t": rt, MC_AUDIO_KEY: end_frame}]
+    kw = {}
+    if _accepts(_orig_init, "frame_count"):
+        kw["frame_count"] = sum(mm.FRAME_PER_TOKEN[k % 5]
+                                for k in range(latent_t))
+    d = mm.PackedLayout.__new__(mm.PackedLayout)
+    _orig_init(d, text_len, latent_t, lh, lw, audio_t,
+               keyframes=kf, refs=ref_mc, **kw)
+    e = mm.PackedLayout.__new__(mm.PackedLayout)
+    _orig_init(e, text_len, latent_t, lh, lw, audio_t,
+               keyframes=kf, refs=ref_mc, **kw)
+    _fixup_audio(e, text_len, ref_mc)
+    if e.position_ids.shape != d.position_ids.shape:
+        raise RuntimeError("audio move changed the layout shape")
+    if not torch.equal(d.position_ids[:, 1:], e.position_ids[:, 1:]):
+        raise RuntimeError("audio move touched a non-time column")
+    td, te = d.position_ids[:, 0], e.position_ids[:, 0]
+    moved = [i for i in range(len(td)) if float(td[i]) != float(te[i])]
+    if not moved:
+        raise RuntimeError("audio move moved no rows")
+    deltas = {round(float(te[i]) - float(td[i]), 5) for i in moved}
+    if len(deltas) != 1:
+        raise RuntimeError("audio rows shifted non-uniformly: %s"
+                           % sorted(deltas))
+    audio_rows = set()
+    for a, b, kind in d.segments:
+        if kind in ("ref_audio", "audio_ref", "cond_audio", "ref"):
+            audio_rows.update(range(a, b))
+    stray = [i for i in moved if audio_rows and i not in audio_rows]
+    if audio_rows and stray:
+        raise RuntimeError("audio move touched non-audio rows: %s"
+                           % stray[:6])
+
+
 def apply_patch():
-    global _orig_init, _applied
+    global _orig_init, _applied, _mode
     if _applied:
         return True
     if not hasattr(mm, "PackedLayout") or not hasattr(mm, "FRAME_RESCALE"):
@@ -497,10 +549,25 @@ def apply_patch():
                      "attributes, patch not applied")
         return False
     if _core_handles_interior_anchors():
-        _LOG.info("h3_suite: this ComfyUI places interior keyframe anchors "
-                  "itself (PR #15439 is merged upstream); leaving core "
-                  "alone")
-        return False
+        # core owns the video anchors now, but the audio timeline
+        # translation was never part of the merged PR - that mechanism is
+        # this pack's own and still has to run
+        _orig_init = mm.PackedLayout.__init__
+        try:
+            _audio_self_test()
+        except Exception as exc:
+            _orig_init = None
+            _LOG.warning("h3_suite: audio-timeline self-test failed on this "
+                         "core (%s); pinned audio would sit at the ref "
+                         "position instead of the timeline end.", exc)
+            return False
+        mm.PackedLayout.__init__ = _patched_init
+        _mode = "audio_only"
+        _applied = True
+        _LOG.info("h3_suite: video keyframe anchors are core's own (PR "
+                  "#15439 merged); keeping only the audio timeline "
+                  "placement, which was never upstreamed")
+        return True
     _orig_init = mm.PackedLayout.__init__
     mod, qual, stock = _init_owner(_orig_init)
     if not stock:
@@ -523,6 +590,7 @@ def apply_patch():
                      "Interior keyframe anchors unavailable.", exc)
         return False
     mm.PackedLayout.__init__ = _patched_init
+    _mode = "full"
     _applied = True
     _LOG.info("h3_suite: interior keyframe anchors enabled")
     return True

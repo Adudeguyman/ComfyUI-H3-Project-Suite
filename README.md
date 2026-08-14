@@ -165,7 +165,7 @@ Worth knowing how far this reaches on a stock ComfyUI: the held frames are put i
 
 Two of this pack's fixes went upstream in ComfyUI on 13 August 2026 ([#15439](https://github.com/Comfy-Org/ComfyUI/pull/15439)): interior keyframe anchors, and letting keyframes and references coexist instead of references quietly winning.
 
-Nothing to do about it. On a ComfyUI that has them, the pack notices and leaves core alone, logging that it did; on an older one it patches as before. The check is on what your build actually does, not on a version number, so it stays right through rebases and backports either way.
+Nothing to do about it. On a ComfyUI that has them, the pack notices and steps back from the video side, keeping only the audio timeline placement — that part is this pack's own and was never upstreamed. On an older ComfyUI it patches as before. Either way it logs what it decided, and the check is on what your build actually does rather than a version number, so it stays right through rebases and backports.
 
 ---
 
