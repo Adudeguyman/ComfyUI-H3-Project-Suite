@@ -157,6 +157,16 @@ This needs the sampler's latent to come from **H3 Context's `latent` output** ra
 
 If a join shows a texture or quality change about a second in, that's the point where the held frames end. **Head hold (1.0)** controls how firmly they're held; try 0.85, or switch seed head off to compare.
 
+Worth knowing how far this reaches on a stock ComfyUI: the held frames are put into the latent and kept there, which is real, but the model still treats those rows as freshly generated rather than as given. Upstream pull request [#15375](https://github.com/Comfy-Org/ComfyUI/pull/15375) is what makes them read as given, and it is not merged yet. Applied to your own checkout, it is what turns this from a nudge into the full effect — and it makes head hold grade the conditioning too, not just the picture.
+
+---
+
+## If you update ComfyUI
+
+Two of this pack's fixes went upstream in ComfyUI on 13 August 2026 ([#15439](https://github.com/Comfy-Org/ComfyUI/pull/15439)): interior keyframe anchors, and letting keyframes and references coexist instead of references quietly winning.
+
+Nothing to do about it. On a ComfyUI that has them, the pack notices and leaves core alone, logging that it did; on an older one it patches as before. The check is on what your build actually does, not on a version number, so it stays right through rebases and backports either way.
+
 ---
 
 ## Things to know before you start

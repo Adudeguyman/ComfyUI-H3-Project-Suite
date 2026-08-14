@@ -406,6 +406,40 @@ def _self_test():
             "amount: %s vs %.6f" % (multi_deltas[:4], want_multi_shift))
 
 
+def _core_handles_interior_anchors():
+    """Does stock already place an interior anchor correctly?
+
+    ComfyUI PR #15439 merged upstream on 2026-08-13 and does what this
+    module does: it removes the first/last restriction outright. On such
+    a core our rewrite is not just unnecessary, it would shift positions
+    stock has already placed. Detection is behavioural rather than a
+    version check, because a version number cannot tell us whether a
+    given build carries the change.
+
+    Returns True only when stock ACCEPTS an interior anchor AND lands it
+    strictly between the endpoints. Anything else - a raise, a wrong
+    coordinate, an unexpected error - returns False and we patch as
+    before.
+    """
+    text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
+    try:
+        frame_count = sum(mm.FRAME_PER_TOKEN[k % 5] for k in range(latent_t))
+        mid = frame_count // 2
+        kf = [{"resolved_frame_index": 0},
+              {"resolved_frame_index": mid},
+              {"resolved_frame_index": frame_count - 1}]
+        probe = mm.PackedLayout.__new__(mm.PackedLayout)
+        mm.PackedLayout.__init__(probe, text_len, latent_t, lh, lw, audio_t,
+                                 keyframes=kf, frame_count=frame_count)
+        ts = [float(probe.position_ids[a, 0])
+              for a, _b, kind in probe.segments if kind == "cond"]
+        if len(ts) != 3:
+            return False
+        return ts[0] < ts[1] < ts[2]
+    except Exception:
+        return False
+
+
 def apply_patch():
     global _orig_init, _applied
     if _applied:
@@ -413,6 +447,11 @@ def apply_patch():
     if not hasattr(mm, "PackedLayout") or not hasattr(mm, "FRAME_RESCALE"):
         _LOG.warning("h3_suite: MiniMax H3 model module missing expected "
                      "attributes, patch not applied")
+        return False
+    if _core_handles_interior_anchors():
+        _LOG.info("h3_suite: this ComfyUI places interior keyframe anchors "
+                  "itself (PR #15439 is merged upstream); leaving core "
+                  "alone")
         return False
     _orig_init = mm.PackedLayout.__init__
     try:

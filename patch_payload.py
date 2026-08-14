@@ -32,6 +32,7 @@ import comfy.model_base as model_base
 _LOG = logging.getLogger("h3_suite")
 
 _orig_extra_conds = None
+_core_fixed_logged = False
 _applied = False
 
 
@@ -52,6 +53,21 @@ def _patched_extra_conds(self, **kwargs):
 
     kf_video = [kf["latent"] for kf in keyframes if "latent" in kf]
     ref_video = [r["latent"] for r in refs if "latent" in r]
+    # PR #15439 merged upstream on 2026-08-13 and concatenates these in
+    # the same order we do. On such a core the payload is already right,
+    # and rewriting it is at best a no-op and at worst a divergence if
+    # upstream refines the order later. Check what core actually produced
+    # rather than trusting a version number.
+    existing = payload.get("cond_video_latents", None)
+    if isinstance(existing, (list, tuple)) \
+            and len(existing) == len(kf_video) + len(ref_video):
+        global _core_fixed_logged
+        if not _core_fixed_logged:
+            _LOG.info("h3_suite: this ComfyUI already combines keyframe and "
+                      "reference latents itself (PR #15439); leaving the "
+                      "payload as core built it")
+            _core_fixed_logged = True
+        return out
     payload["cond_video_latents"] = kf_video + ref_video
     payload["cond_audio_latents"] = [r["audio_latent"] for r in refs
                                      if r.get("audio_latent") is not None]

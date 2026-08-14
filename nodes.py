@@ -310,7 +310,10 @@ class H3Context:
                     "tooltip": "How firmly the seeded head is held. 1.0 "
                                "keeps it exactly; lower values let the "
                                "model repaint it slightly, which can ease "
-                               "the release at the boundary."}),
+                               "the release at the boundary. On stock "
+                               "ComfyUI this grades the pixels only; with "
+                               "upstream PR #15375 applied it also grades "
+                               "how the held rows are conditioned."}),
             },
             "optional": {
                 "vae": ("VAE", {
