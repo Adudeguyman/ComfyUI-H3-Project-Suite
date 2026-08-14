@@ -122,6 +122,26 @@ const CSS = `
 .h3p-next{border:1px dashed #2e3440;border-radius:8px;padding:10px 8px;text-align:center;
   font-size:10px;color:#5c6472;line-height:1.5;flex:0 0 auto;}
 .h3p-next b{color:#8a93a3;font-family:ui-monospace,monospace;font-weight:400;}
+.h3p-driftwrap{position:absolute;inset:0;background:rgba(10,12,16,.72);
+  display:none;align-items:center;justify-content:center;z-index:40;}
+.h3p-driftwrap.on{display:flex;}
+.h3p-driftwrap .card{background:#171b23;border:1px solid #2b3140;
+  border-radius:10px;width:min(680px,92%);max-height:86%;overflow:auto;}
+.h3p-driftwrap .head{display:flex;align-items:center;gap:8px;
+  padding:10px 14px;border-bottom:1px solid #232833;color:#d7dbe2;
+  font-size:13px;}
+.h3p-driftwrap .body{padding:14px;}
+table.h3p-drift{width:100%;border-collapse:collapse;font-size:12px;
+  color:#c3c9d4;}
+table.h3p-drift th{text-align:left;font-weight:400;color:#7d8697;
+  padding:4px 8px;border-bottom:1px solid #262c38;font-size:11px;}
+table.h3p-drift td{padding:5px 8px;border-bottom:1px solid #1e232d;}
+table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
+.h3p-spark{margin-top:14px;}
+.h3p-spark .lbl{font-size:11px;color:#7d8697;margin-bottom:5px;}
+.h3p-spark .bars{display:flex;align-items:flex-end;gap:3px;height:40px;}
+.h3p-spark .bars i{flex:1;background:#3b4657;border-radius:2px 2px 0 0;}
+.h3p-note{font-size:11px;color:#7d8697;line-height:1.5;margin:14px 0 0;}
 .h3p-foot{display:flex;align-items:center;gap:8px;padding:9px 16px;
   border-top:1px solid #2a2f3a;background:#171a20;font-size:11px;color:#7d8698;}
 .h3p-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;
@@ -266,6 +286,15 @@ class ChainTimeline {
     this.confirmMsg = el("div", { class: "msg" });
     this.confirmBtns = el("div", { style: "display:flex;gap:8px;" +
                                           "flex-wrap:wrap" });
+    this.driftBody = el("div", { class: "body" });
+    this.drift = el("div", { class: "h3p-driftwrap" },
+      el("div", { class: "card" },
+        el("div", { class: "head" },
+          el("span", { text: "Drift across the chain" }),
+          el("div", { class: "h3p-spacer" }),
+          el("button", { class: "h3p-x", text: "\u2715",
+                         onclick: () => this.drift.classList.remove("on") })),
+        this.driftBody));
     this.confirm = el("div", { class: "h3p-confirm" }, this.confirmMsg,
                       this.confirmBtns);
 
@@ -552,7 +581,14 @@ class BranchModal extends ChainTimeline {
                            text: "\u23ee Jump to the join",
                            onclick: () => this.jumpToJoin() })))));
 
-    this._esc = (e) => { if (e.key === "Escape") this.close(); };
+    this._esc = (e) => {
+      if (e.key !== "Escape") return;
+      if (this.drift.classList.contains("on")) {
+        this.drift.classList.remove("on");
+        return;
+      }
+      this.close();
+    };
   }
 
   clipURL(basename) {
@@ -773,6 +809,10 @@ class ProjectModal extends ChainTimeline {
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),
+          el("button", { class: "h3p-btn", text: "Measure drift",
+                         title: "how brightness, contrast, sharpness and " +
+                                "colour move across the chain",
+                         onclick: () => this.measureDrift() }),
           el("button", { class: "h3p-btn", text: "Clean up takes",
                          title: "move every alternate take to .trash/; " +
                                 "the chain is untouched",
@@ -791,6 +831,7 @@ class ProjectModal extends ChainTimeline {
           el("div", { class: "h3p-rail" },
             el("div", { class: "h3p-railhead", text: "Chain" }),
             this.railBody)),
+        this.drift,
         el("div", { class: "h3p-foot" }, this.footText)));
 
     this._esc = (e) => { if (e.key === "Escape") this.close(); };
@@ -844,6 +885,12 @@ class ProjectModal extends ChainTimeline {
     this.nameInput.value = "";
     this.nameWrap.classList.add("on");
     this.nameInput.focus();
+  }
+
+  showConfirmMsg(msg) {
+    this.confirmMsg.textContent = msg;
+    this.confirmBtns.innerHTML = "";
+    this.confirm.classList.add("on");
   }
 
   showConfirm(msg, onYes) {
@@ -1187,6 +1234,72 @@ class ProjectModal extends ChainTimeline {
                              { name: this.name() });
       toast(`opened ${out.path}`);
     } catch (e) { toast(e.message, true); }
+  }
+
+  async measureDrift() {
+    this.showConfirmMsg("measuring every clip \u2014 this decodes a few " +
+                        "frames from each, so give it a moment\u2026");
+    let d;
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/drift?name=${encodeURIComponent(this.name())}`);
+      d = await r.json();
+      if (d.error) throw new Error(d.error);
+    } catch (e) { this.hideConfirm(); toast(e.message, true); return; }
+
+    const t = d.trend || {};
+    const fmtRow = (key, label, unit) => {
+      const x = t[key];
+      if (!x) return "";
+      const per = x.per_clip;
+      const dir = Math.abs(x.pct_total) < 1.5 ? "steady"
+        : (x.total > 0 ? "rising" : "falling");
+      return `<tr><td>${label}</td>` +
+        `<td class="n">${x.first.toFixed(1)}${unit}</td>` +
+        `<td class="n">${x.last.toFixed(1)}${unit}</td>` +
+        `<td class="n">${x.total > 0 ? "+" : ""}${x.total.toFixed(1)}` +
+        ` (${x.pct_total > 0 ? "+" : ""}${x.pct_total.toFixed(1)}%)</td>` +
+        `<td class="n">${per > 0 ? "+" : ""}${per.toFixed(2)}/clip</td>` +
+        `<td>${dir}</td></tr>`;
+    };
+    // a bar per clip for the measure that moved most, so the shape of
+    // the drift is visible - steady slide or one bad clip
+    let worst = null, worstPct = 0;
+    for (const k of ["luma", "contrast", "sharpness", "colour"]) {
+      const x = t[k];
+      if (x && Math.abs(x.pct_total || 0) > worstPct) {
+        worstPct = Math.abs(x.pct_total); worst = k;
+      }
+    }
+    let spark = "";
+    if (worst) {
+      const vals = d.clips.map((c) => c[worst]);
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      const span = hi - lo || 1;
+      spark = `<div class="h3p-spark"><div class="lbl">${worst} per clip` +
+        ` \u2014 ${lo.toFixed(1)} to ${hi.toFixed(1)}</div><div class="bars">` +
+        d.clips.map((c) => {
+          const h = 4 + 34 * ((c[worst] - lo) / span);
+          return `<i style="height:${h}px" title="${c.label}: ` +
+                 `${c[worst].toFixed(2)}"></i>`;
+        }).join("") + `</div></div>`;
+    }
+
+    this.driftBody.innerHTML =
+      `<table class="h3p-drift"><thead><tr><th></th><th>clip 1</th>` +
+      `<th>clip ${d.clips.length}</th><th>change</th><th>rate</th>` +
+      `<th></th></tr></thead><tbody>` +
+      fmtRow("luma", "brightness", "") +
+      fmtRow("contrast", "contrast", "") +
+      fmtRow("sharpness", "sharpness", "") +
+      fmtRow("colour", "colour", "%") +
+      `</tbody></table>` + spark +
+      `<p class="h3p-note">These also move when the content changes \u2014 ` +
+      `a darker scene lowers brightness honestly. Read the trend across ` +
+      `many clips of one continuous scene, not any single number. A cut ` +
+      `to a new angle resets most of this.</p>`;
+    this.hideConfirm();
+    this.drift.classList.add("on");
   }
 
   async cleanupTakes() {

@@ -46,6 +46,14 @@ let the model repaint it slightly.
 `video_source` now defaults to `latent`, which is what every example
 workflow and the whole project layer already used.
 
+### Measuring drift
+
+**Measure drift** in the Hub samples every clip and reports how
+brightness, contrast, sharpness and colour move across the chain - as a
+total, as a rate per clip, and as a bar per clip for whichever moved
+most. Descriptive statistics, not a quality score: they move with
+content too, so the trend across a continuous scene is what to read.
+
 ### Diagnostics
 
 - `tests/video_seam_probe.py` classifies a join as duplicate, skip,

@@ -205,6 +205,27 @@ def _register():
             "chained_note": chained,
         })
 
+    @routes.get("/h3_suite/project/drift")
+    async def drift(request):
+        """Per-clip picture statistics across the approved chain."""
+        try:
+            p = _project(request)
+            clips = p.clips
+            if len(clips) < 3:
+                return web.json_response(
+                    {"error": "needs at least 3 approved clips to show a "
+                              "trend"}, status=400)
+            from .chain_report import measure_chain
+            paths = [p.clip_video_path(c["basename"]) for c in clips]
+            labels = ["clip %d take %d" % (c["index"], c.get("take", 1))
+                      for c in clips]
+            out = measure_chain(paths, labels)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        except Exception as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response(out)
+
     @routes.post("/h3_suite/project/purge_trash")
     @_json_post
     def purge(body):

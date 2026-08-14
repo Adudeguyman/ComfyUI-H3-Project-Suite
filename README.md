@@ -36,7 +36,7 @@ The short version of how: in its default *latent* mode, each clip is handed to t
 2. Restart ComfyUI.
 3. Hard-refresh your browser (Ctrl+Shift+R).
 
-You need `ffmpeg` on your system for the export button. Levelling a join also needs `av` and `numpy`, which most ComfyUI installs already have — if yours doesn't, the rest of the pack works fine and only that one feature reports a missing dependency.
+You need `ffmpeg` on your system for the export button. Levelling a join and measuring drift also need `av` and `numpy`, which most ComfyUI installs already have — if yours doesn't, the rest of the pack works fine and only that one feature reports a missing dependency.
 
 **Important:** if you have the original *ComfyUI-H3-Motion-Context* pack installed, remove or disable it. The two can't run at the same time — this one detects the conflict and refuses to run rather than produce a bad render.
 
@@ -118,6 +118,16 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 **Clean up takes** moves every alternate take into the project's trash. Your chain isn't touched. Takes in the trash can still be branched from, so this is safe to do whenever the folder gets messy.
 
 **Purge trash** is the permanent delete. It tells you how much it's about to remove first. After that, those takes are gone for good.
+
+---
+
+## Measuring drift
+
+Each clip is built on the previous clip's output, so small changes compound: exposure wanders, texture softens. **Measure drift** in the Hub samples every clip in the chain and reports how brightness, contrast, sharpness and colour move from the first to the last, as a total and as a rate per clip, with a bar per clip for whichever moved most.
+
+These numbers also move when the content changes — a clip that cuts to a dark interior is genuinely darker. Read the trend across a run of clips in one continuous scene, not any single value.
+
+If the trend is steep, the cheapest fix isn't a setting: a deliberate cut to a new angle re-derives the look from your references and prompt instead of inheriting it, which resets most of the accumulation.
 
 ---
 
