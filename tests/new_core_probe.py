@@ -112,11 +112,13 @@ def main():
     text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
     fc = sum(mmnew.FRAME_PER_TOKEN[k % 5] for k in range(latent_t))
     def kf(i, marked):
-        d = {"resolved_frame_index": i,
-             "latent": torch.zeros(1, 16, 1, lh, lw)}
+        # marked = the pack's own convention: index smuggled under MC_KEY
+        # with resolved_frame_index left at 0, exactly as nodes.py emits
         if marked:
-            d[pl2.MC_KEY] = True
-        return d
+            return {"resolved_frame_index": 0, pl2.MC_KEY: i,
+                    "latent": torch.zeros(1, 16, 1, lh, lw)}
+        return {"resolved_frame_index": i,
+                "latent": torch.zeros(1, 16, 1, lh, lw)}
     plain = mmnew.PackedLayout.__new__(mmnew.PackedLayout)
     # core's own placement, no markers -> wrapper passes through untouched
     mmnew.PackedLayout.__init__(plain, text_len, latent_t, lh, lw, audio_t,
@@ -130,10 +132,11 @@ def main():
           for a, _b, k in plain.segments if k == "cond"]
     to = [float(ours.position_ids[a, 0])
           for a, _b, k in ours.segments if k == "cond"]
-    assert tp == to, "audio_only mode must not move video anchors: %s vs %s" \
-        % (tp, to)
-    print("3. new core: marked video anchors identical to core's own %s"
-          % tp)
+    assert tp == to, ("smuggled indices must be un-smuggled to core's own "
+                      "placement: %s vs %s" % (tp, to))
+    assert len(set(to)) == 3, "pinned blocks stacked on one frame: %s" % to
+    print("3. new core: smuggled anchors un-smuggled to core placement %s"
+          % to)
 
     # audio: a marked audio ref must still be translated onto the timeline
     end_frame, rt = 4, 8

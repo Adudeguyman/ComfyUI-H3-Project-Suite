@@ -215,6 +215,21 @@ def _fixup_audio(layout, text_len, refs):
 
 def _patched_init(self, text_len, latent_t, latent_h, latent_w, audio_t,
                   keyframes=None, refs=None, frame_count=None):
+    if _mode == "audio_only" and keyframes:
+        # this core places anchors at their real coordinates natively, so
+        # UN-SMUGGLE: the pack's blocks ride at resolved_frame_index 0
+        # with the true position under MC_KEY (the pre-#15439 convention,
+        # when interior values raised). Handing core index 0 would stack
+        # every pinned block on the first frame - which reads as a
+        # two-frame skip at every join. Hand it the truth instead.
+        fixed = []
+        for kf in keyframes:
+            real = kf.get(MC_KEY)
+            if real is not None:
+                kf = dict(kf)
+                kf["resolved_frame_index"] = int(real)
+            fixed.append(kf)
+        keyframes = fixed
     # forward frame_count only when the thing underneath takes it: another
     # pack may have replaced it with a narrower signature
     kw = {"keyframes": keyframes, "refs": refs}
