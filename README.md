@@ -42,7 +42,7 @@ You need `ffmpeg` on your system for the export button. Levelling a join and mea
 
 ---
 
-## The four nodes
+## The five nodes
 
 You wire these up once, then never touch them again.
 
@@ -52,6 +52,7 @@ You wire these up once, then never touch them again.
 | **H3 Context** | Does the actual joining. Set once, forget. |
 | **H3 Context Trim** | Removes the overlap at the start of each new clip. Set once, forget. |
 | **H3 Project Save** | Saves each finished clip into the project. |
+| **H3 Audio Refine** | Optional. Refines a clip's audio while its picture stays exactly as rendered. |
 
 Three connections do the whole job:
 
@@ -118,6 +119,22 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 **Clean up takes** moves every alternate take into the project's trash. Your chain isn't touched. Takes in the trash can still be branched from, so this is safe to do whenever the folder gets messy.
 
 **Purge trash** is the permanent delete. It tells you how much it's about to remove first. After that, those takes are gone for good.
+
+---
+
+## Refining the audio without touching the picture
+
+The turbo LoRAs reach a usable picture in four steps, but four steps is thin for speech and music. Raising the step count re-rolls everything — the take you liked becomes a take you haven't seen.
+
+**H3 Audio Refine** pins the video and frees the audio. Feed it your sampler's finished latent, run its output through a second sampler at a low denoise (start around 0.3–0.4), and the audio refines against your finished picture while the picture itself cannot move.
+
+```
+your sampler ──▶ H3 Audio Refine ──▶ second sampler ──▶ decode
+```
+
+Everything else stays as it is: same model, same conditioning, same seed. **Audio hold** decides how much of the existing audio survives — 0.0 lets the refiner rework it freely, higher values nudge what's already there.
+
+This is not cheaper than more steps: the video still travels through the network, it just can't change. What it buys is fixing the audio without risking the picture. It needs a ComfyUI new enough to place keyframe anchors itself.
 
 ---
 

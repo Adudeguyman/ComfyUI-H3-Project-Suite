@@ -118,6 +118,11 @@ def make_torch():
             shape = tuple(shape[0])
         return _T(np.zeros(shape, dtype=np.float32))
     t.zeros = _zeros
+
+    def _full(shape, value, dtype=np.float32):
+        from _node_smoke_test import T as _T
+        return _T(np.full(tuple(shape), float(value), dtype=np.float32))
+    t.full = _full
     return t
 
 

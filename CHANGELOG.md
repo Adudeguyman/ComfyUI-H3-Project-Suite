@@ -46,6 +46,14 @@ let the model repaint it slightly.
 `video_source` now defaults to `latent`, which is what every example
 workflow and the whole project layer already used.
 
+### H3 Audio Refine
+
+A new optional node: pins every video row and frees the audio, so a
+second sampler pass at low denoise refines speech and music against a
+finished picture that cannot change. For turbo-LoRA graphs where four
+steps suit the picture but not the soundtrack. Not cheaper than raising
+steps - the point is not risking a take you already liked.
+
 ### Measuring drift
 
 **Measure drift** in the Hub samples every clip and reports how
