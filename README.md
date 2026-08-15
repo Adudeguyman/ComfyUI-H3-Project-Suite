@@ -157,7 +157,7 @@ This needs the sampler's latent to come from **H3 Context's `latent` output** ra
 
 If a join shows a texture or quality change about a second in, that's the point where the held frames end. **Head hold (1.0)** controls how firmly they're held; try 0.85, or switch seed head off to compare.
 
-Worth knowing how far this reaches on a stock ComfyUI: the held frames are put into the latent and kept there, which is real, but the model still treats those rows as freshly generated rather than as given. Upstream pull request [#15375](https://github.com/Comfy-Org/ComfyUI/pull/15375) is what makes them read as given, and it is not merged yet. Applied to your own checkout, it is what turns this from a nudge into the full effect — and it makes head hold grade the conditioning too, not just the picture.
+On a ComfyUI new enough to place keyframe anchors itself, seed head runs at **full strength**: the pack carries the mechanism from upstream pull request [#15375](https://github.com/Comfy-Org/ComfyUI/pull/15375) (not merged yet) as a runtime layer, vendored from the [MultiRef fork](https://github.com/seitanism/ComfyUI-H3-Motion-Context-MultiRef). Held frames read as *given* content from the first sampling step, and head hold grades the conditioning itself, not just the picture. Nothing on disk changes: the layer loads into memory when seed head first runs, a restart reverts it, and if ComfyUI ever ships this natively the pack detects that and steps aside. The log says which form you got. On older ComfyUI builds seed head keeps its simpler form — the held frames land exactly, they just steer the model more weakly.
 
 ---
 

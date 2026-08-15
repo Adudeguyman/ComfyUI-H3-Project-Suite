@@ -54,6 +54,17 @@ total, as a rate per clip, and as a bar per clip for whichever moved
 most. Descriptive statistics, not a quality score: they move with
 content too, so the trend across a continuous scene is what to read.
 
+### seed_head at full strength
+
+On PR-15439 cores, seed_head now activates a vendored runtime layer
+carrying the PR #15375 mechanism (per-row cond-timestep for masked
+rows), from seitanism's MultiRef fork of the NikoDemon80 lineage,
+GPL-3.0, credit drozbay/AbleJones for the upstream PR. Capability-
+aware: native support wins, only missing pieces install, in memory,
+restart reverts, partial-native cores are refused loudly. Held rows
+now read as given content from step one, and head_hold grades the
+conditioning. Older cores keep stock seed_head unchanged.
+
 ### Diagnostics
 
 - `tests/video_seam_probe.py` classifies a join as duplicate, skip,

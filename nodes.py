@@ -663,6 +663,45 @@ class H3Context:
                          "path; ignoring it for video_source='frames'")
         return (out, trim, out_latent)
 
+    _mask_layer_state = None   # None = untried, True = active, False = stock
+
+    def _ensure_mask_layer(self):
+        """Activate the vendored PR #15375 runtime layer, once.
+
+        This is what makes seed_head's held rows read as GIVEN content at
+        the cond timestep from step one, instead of as the model's own
+        noisy work-in-progress - and it makes head_hold grade the
+        conditioning, not just the pixels. Native ComfyUI support always
+        wins; the layer installs only missing pieces, in memory; a restart
+        reverts it. Only attempted on PR-15439 cores, which the vendored
+        forward was written against - older cores keep stock seed_head.
+        """
+        cls = type(self)
+        if cls._mask_layer_state is not None:
+            return cls._mask_layer_state
+        try:
+            from .patch_layout import _mode as layout_mode
+            if layout_mode != "audio_only":
+                _LOG.info("h3_suite: seed_head running in stock form - the "
+                          "full-strength mask layer needs a ComfyUI with "
+                          "PR #15439 merged")
+                cls._mask_layer_state = False
+                return False
+            from .mask_compat import ensure_h3_mask_compat
+            from .mask_payload_compat import ensure_av_mask_payload_compat
+            ensure_h3_mask_compat()
+            ensure_av_mask_payload_compat()
+            _LOG.info("h3_suite: seed_head at full strength - held rows "
+                      "run at the cond timestep (PR #15375 mechanism, "
+                      "vendored; native support wins when it merges)")
+            cls._mask_layer_state = True
+        except Exception as exc:
+            _LOG.warning("h3_suite: mask layer unavailable (%s); seed_head "
+                         "runs in stock form - the held head still lands "
+                         "bit-exact, it just conditions more weakly", exc)
+            cls._mask_layer_state = False
+        return cls._mask_layer_state
+
     def _seed_head_latent(self, latent, head_hold):
         """Write the pinned steps into the clip latent's head and attach
         a noise mask that holds them during sampling.
@@ -678,6 +717,7 @@ class H3Context:
         ctx, k0, steps = getattr(self, "_last_pin", (None, 0, 0))
         if ctx is None or steps <= 0:
             return latent
+        self._ensure_mask_layer()
         samples = latent["samples"]
         parts = list(samples.unbind())
         video = parts[0].clone()
