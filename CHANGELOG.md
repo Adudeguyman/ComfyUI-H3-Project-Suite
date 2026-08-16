@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Auto-approve
+
+A per-project toggle in the panel's top bar that turns off the review
+gate: each render is approved as it arrives and the next queue extends
+the chain instead of re-rolling. Off by default, remembered in
+project.json, and confirmed before it can be turned on.
+
+While it is on it is visible in three places - a red banner in the
+panel, a red line on the Hub node, and a warning in the ComfyUI log on
+every render - because the failure mode is a chain that grew on its own
+while nobody was looking.
+
+Takes are still recorded, so an auto-approved clip can be reopened and
+re-rolled like any other.
+
 ## 1.2.0
 
 ### Keeping up with ComfyUI

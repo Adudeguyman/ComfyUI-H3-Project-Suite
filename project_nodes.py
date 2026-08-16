@@ -134,6 +134,10 @@ class H3ProjectHub:
         tail = p.chain_tail()
         pend = p.pending()
         bits = ["%d approved" % len(p.approved())]
+        if getattr(p, "auto_approve", False):
+            # first in the line and unmissable: this is the state that
+            # quietly grows a chain nobody looked at
+            bits.insert(0, "\u26a0 AUTO-APPROVE ON - no manual review")
         if pend is not None:
             bits.append("clip %d take %d PENDING REVIEW"
                         % (pend["index"], pend["take"]))
@@ -141,7 +145,10 @@ class H3ProjectHub:
         bits.append("continues %s" % (tail["basename"] if tail else
                                       "nothing (fresh clip 1)"))
         status = " | ".join(bits)
-        _LOG.info("h3_suite: project %r: %s", p.name, status)
+        if getattr(p, "auto_approve", False):
+            _LOG.warning("h3_suite: project %r: %s", p.name, status)
+        else:
+            _LOG.info("h3_suite: project %r: %s", p.name, status)
 
         handle = {"name": p.name, "output_dir": out_dir}
         return (handle, context, active, status)
@@ -353,8 +360,13 @@ class H3ProjectSave:
         _write_video(video_path, images, audio, fps, tags)
 
         p.record_render(index, take, meta)
-        _LOG.info("h3_suite: project %r recorded %s (pending review)",
-                  p.name, basename)
+        if getattr(p, "auto_approve", False):
+            _LOG.warning("h3_suite: project %r recorded %s and APPROVED it "
+                         "automatically - the chain advanced without review",
+                         p.name, basename)
+        else:
+            _LOG.info("h3_suite: project %r recorded %s (pending review)",
+                      p.name, basename)
         return (basename,)
 
 

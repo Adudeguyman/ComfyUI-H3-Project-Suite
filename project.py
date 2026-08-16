@@ -257,6 +257,7 @@ class Project:
             os.makedirs(self.clips_dir, exist_ok=True)
             self.clips = []
             self.branched_from = None
+            self.auto_approve = False
             self._write()
         else:
             raise ProjectError(
@@ -275,11 +276,14 @@ class Project:
                                  VERSION))
         self.clips = list(data.get("clips", []))
         self.branched_from = data.get("branched_from")
+        self.auto_approve = bool(data.get("auto_approve", False))
         self._check_invariants()
 
     def _write(self):
         self._check_invariants()
         data = {"version": VERSION, "name": self.name, "clips": self.clips}
+        if getattr(self, "auto_approve", False):
+            data["auto_approve"] = True
         if getattr(self, "branched_from", None):
             data["branched_from"] = self.branched_from
         fd, tmp = tempfile.mkstemp(dir=self.root, prefix=".manifest_",
@@ -424,6 +428,11 @@ class Project:
         takes = [t for t in prior_takes if t["take"] != take]
         takes.append({"take": take, "basename": basename, "meta": meta})
         entry["takes"] = sorted(takes, key=lambda t: t["take"])
+        if getattr(self, "auto_approve", False):
+            # skip the gate, keep the history: the takes list above is
+            # written either way, so this clip can still be reopened
+            entry["status"] = "approved"
+            entry["auto_approved"] = True
         self.clips.append(entry)
         self._write()
         return basename
@@ -616,6 +625,19 @@ class Project:
         _LOG.info("h3_suite: cleaned %d alternate take(s) into .trash/ "
                   "(%.1f MB)", len(planned), freed / (1024.0 * 1024.0))
         return {"planned": planned, "bytes": freed}
+
+    def set_auto_approve(self, on):
+        """Turn the review gate off (or back on) for THIS project.
+
+        With it on, a finished render is approved the moment it is
+        recorded, so the next queue extends the chain instead of
+        re-rolling the same clip. Every take is still kept on disk, so an
+        auto-approved clip can be reopened and branched afterwards - the
+        gate is skipped, not the history.
+        """
+        self.auto_approve = bool(on)
+        self._write()
+        return self.auto_approve
 
     def approve(self):
         pend = self.pending()

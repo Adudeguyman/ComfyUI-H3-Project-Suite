@@ -142,6 +142,17 @@ table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
 .h3p-spark .bars{display:flex;align-items:flex-end;gap:3px;height:40px;}
 .h3p-spark .bars i{flex:1;background:#3b4657;border-radius:2px 2px 0 0;}
 .h3p-note{font-size:11px;color:#7d8697;line-height:1.5;margin:14px 0 0;}
+.h3p-autowarn{color:#ff5c5c;font-weight:600;line-height:1.35;
+  margin-bottom:4px;}
+.h3p-autobar{display:flex;align-items:center;gap:8px;padding:7px 12px;
+  background:rgba(255,60,60,.10);border:1px solid rgba(255,92,92,.45);
+  border-radius:7px;color:#ff5c5c;font-size:12px;font-weight:600;
+  margin:0 16px 10px;}
+.h3p-autobar .sp{flex:1;}
+.h3p-auto{display:flex;align-items:center;gap:6px;cursor:pointer;
+  user-select:none;font-size:12px;color:#8a93a3;}
+.h3p-auto.on{color:#ff5c5c;font-weight:600;}
+.h3p-auto input{accent-color:#ff5c5c;cursor:pointer;margin:0;}
 .h3p-foot{display:flex;align-items:center;gap:8px;padding:9px 16px;
   border-top:1px solid #2a2f3a;background:#171a20;font-size:11px;color:#7d8698;}
 .h3p-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;
@@ -556,6 +567,22 @@ class BranchModal extends ChainTimeline {
     this.createBtn = el("button", { class: "h3p-btn ok",
       text: "Create branch", onclick: () => this.create() });
 
+    this.autoBox = el("input", {
+      type: "checkbox",
+      onchange: (e) => this.toggleAuto(e.target.checked),
+    });
+    this.autoWrap = el("label", { class: "h3p-auto",
+                                  title: "approve every render as it " +
+                                         "finishes, without stopping for " +
+                                         "review" },
+                       this.autoBox, el("span", { text: "Auto-approve" }));
+    this.autoBar = el("div", { class: "h3p-autobar",
+                               style: "display:none;" },
+      el("span", { text: "\u26a0 Auto-approval is on \u2014 the chain is " +
+                         "progressing without manual review" }),
+      el("div", { class: "sp" }),
+      el("button", { class: "h3p-btn", text: "Turn off",
+                     onclick: () => this.toggleAuto(false) }));
     this.overlay = el("div", {
       class: "h3p-overlay",
       onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
@@ -806,6 +833,7 @@ class ProjectModal extends ChainTimeline {
           this.refreshBtn,
           this.nameWrap,
           el("div", { class: "h3p-spacer" }),
+          this.autoWrap,
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),
@@ -821,6 +849,7 @@ class ProjectModal extends ChainTimeline {
                          onclick: () => this.purge() }),
           el("button", { class: "h3p-x", text: "\u2715",
                          onclick: () => this.close() })),
+        this.autoBar,
         el("div", { class: "h3p-body" },
           el("div", { class: "h3p-main" },
             el("div", { class: "h3p-viewhead" }, this.viewTitle,
@@ -1421,8 +1450,40 @@ class ProjectModal extends ChainTimeline {
     this.node._h3RefreshSummary?.();
   }
 
+  async toggleAuto(on) {
+    if (on) {
+      // easy to hit by accident, hard to notice afterwards: make the
+      // consequence explicit before it takes effect
+      this.autoBox.checked = false;
+      this.showConfirm(
+        "Turn OFF review for this project? Every render will be approved " +
+        "as it finishes and the chain will keep extending on its own. " +
+        "Takes are still kept, so clips can be reopened afterwards.",
+        () => this.setAuto(true));
+      return;
+    }
+    this.setAuto(false);
+  }
+
+  async setAuto(on) {
+    try {
+      const r = await api.fetchApi("/h3_suite/project/auto_approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: this.name(), on: !!on }),
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+    } catch (e) { toast(e.message, true); }
+    this.refresh(true);
+  }
+
   render() {
     const s = this.state;
+    const auto = !!(s && s.auto_approve);
+    this.autoBox.checked = auto;
+    this.autoWrap.classList.toggle("on", auto);
+    this.autoBar.style.display = auto ? "flex" : "none";
     this.actions.innerHTML = "";
     this.railBody.innerHTML = "";
     if (!s || s.missing) {
@@ -1722,7 +1783,11 @@ app.registerExtension({
           const approved = s.clips.filter(
             (c) => c.status === "approved").length;
           const pend = s.pending;
-          summary.innerHTML =
+          const warn = s.auto_approve
+            ? `<div class="h3p-autowarn">\u26a0 Auto-approval is on \u2014 ` +
+              `the chain is progressing without manual review</div>`
+            : "";
+          summary.innerHTML = warn +
             `<b>${name}</b> \u00b7 ${approved} approved` +
             (pend ? ` \u00b7 <span class="pend">clip ${pend.index} ` +
                     `take ${pend.take} pending review</span>` : "") +

@@ -121,6 +121,18 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
+## Skipping review
+
+Normally a finished render waits for you: it sits as pending, and queueing again re-rolls it rather than moving on. **Auto-approve**, in the panel's top bar, turns that off for one project — each render is approved as it arrives and the next queue extends the chain instead.
+
+It is per project, remembered in the project file, and off unless you turn it on. Turning it on asks first; turning it off does not.
+
+While it is on you cannot miss it: a red line across the panel, a red line on the node, and a warning in the ComfyUI log on every render. That is deliberate — a chain that grew twelve clips nobody looked at is a bad surprise.
+
+Your takes are still kept. An auto-approved clip can be reopened and re-rolled like any other, so the gate is what gets skipped, not the history.
+
+---
+
 ## Measuring drift
 
 Each clip is built on the previous clip's output, so small changes compound: exposure wanders, texture softens. **Measure drift** in the Hub samples every clip in the chain and reports how brightness, contrast, sharpness and colour move from the first to the last, as a total and as a rate per clip, with a bar per clip for whichever moved most.

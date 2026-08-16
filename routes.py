@@ -39,6 +39,7 @@ def _register():
         index, take, basename = p.next_save()
         return {
             "name": p.name,
+            "auto_approve": bool(getattr(p, "auto_approve", False)),
             "clips": p.clips,
             "chain_active": p.chain_active(),
             "pending": p.pending(),
@@ -204,6 +205,23 @@ def _register():
             "reaches_tail": plan.get("reaches_tail", False),
             "chained_note": chained,
         })
+
+    @routes.post("/h3_suite/project/auto_approve")
+    async def auto_approve(request):
+        """Turn this project's review gate off, or back on."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        try:
+            p = _project(request)
+            on = p.set_auto_approve(bool(body.get("on")))
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        _LOG.warning(
+            "h3_suite: project %r auto-approve %s", p.name,
+            "ON - the chain will progress without review" if on else "off")
+        return web.json_response({"auto_approve": on})
 
     @routes.get("/h3_suite/project/drift")
     async def drift(request):
