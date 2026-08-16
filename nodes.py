@@ -739,91 +739,6 @@ class H3Context:
         return out
 
 
-class H3AudioRefine:
-    """Hold the picture, let the audio keep denoising.
-
-    The turbo LoRAs get a usable picture in four steps, but four steps is
-    thin for the audio stream - speech and music want more. Raising the
-    global step count re-rolls the whole clip, picture included, so a
-    take you liked becomes a take you have not seen.
-
-    This node pins the video and frees the audio. Feed it the sampler's
-    finished latent; it hands back the same latent carrying a mask that
-    holds every video row exactly while leaving audio free. Run that
-    through a second sampler at a low denoise and the audio refines
-    against your finished picture as clean conditioning - the video
-    cannot move, because it is pinned at the conditioning timestep the
-    same way a reference image is.
-
-    It is not cheaper than more global steps: video rows still travel
-    through the network, they simply cannot change. What it buys is
-    refining the audio WITHOUT risking the picture.
-
-    Needs a ComfyUI new enough to place keyframe anchors itself
-    (PR #15439); the pack activates its mask layer here the same way
-    seed_head does.
-    """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "latent": ("LATENT", {
-                    "tooltip": "the finished latent from your sampler"}),
-                "audio_hold": ("FLOAT", {
-                    "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05,
-                    "tooltip": "how much of the existing audio to keep. "
-                               "0.0 lets the refiner rework it freely; "
-                               "raise it to nudge rather than redo."}),
-            },
-        }
-
-    RETURN_TYPES = ("LATENT",)
-    RETURN_NAMES = ("latent",)
-    OUTPUT_TOOLTIPS = (
-        "the same latent, carrying a mask that holds the video and frees "
-        "the audio. Feed it to a second sampler's latent_image, with "
-        "denoise low enough to refine rather than restart.",)
-    FUNCTION = "apply"
-    CATEGORY = "MiniMax H3"
-    DESCRIPTION = ("Refine a clip's audio while its picture stays exactly "
-                   "as rendered.")
-
-    def apply(self, latent, audio_hold=0.0):
-        import torch
-        samples = latent.get("samples")
-        parts = None
-        try:
-            parts = list(samples.unbind())
-        except Exception:
-            pass
-        if not parts or len(parts) < 2:
-            raise RuntimeError(
-                "h3_suite: audio refine needs an H3 audio-video latent "
-                "(the sampler output of an H3 graph). This latent has no "
-                "separate audio part.")
-
-        H3Context._ensure_mask_layer(H3Context())
-
-        video, audio = parts[0], parts[1]
-        # video: mask 0 everywhere = hold every row exactly
-        vmask = torch.zeros(
-            (int(video.shape[0]), 1, int(video.shape[2]),
-             int(video.shape[3]), int(video.shape[4])),
-            dtype=torch.float32)
-        # audio: mask 1 = denoise freely, lowered by audio_hold to nudge
-        amask = torch.full(
-            (int(audio.shape[0]), 1, int(audio.shape[2]),
-             int(audio.shape[3])),
-            float(1.0 - audio_hold), dtype=torch.float32)
-        out = dict(latent)
-        out["noise_mask"] = type(samples)([vmask, amask])
-        _LOG.info("h3_suite: audio refine - %d video steps held, audio "
-                  "free at %.2f; run this through a second sampler at a "
-                  "low denoise", int(video.shape[2]), 1.0 - audio_hold)
-        return (out,)
-
-
 class H3ContextTrim:
     """Drop the pinned head off a decoded clip, picture and sound together.
 
@@ -1180,14 +1095,12 @@ class H3ContextLoadLatent:
 NODE_CLASS_MAPPINGS = {
     "H3Context": H3Context,
     "H3ContextTrim": H3ContextTrim,
-    "H3AudioRefine": H3AudioRefine,
     "H3ContextSaveLatent": H3ContextSaveLatent,
     "H3ContextLoadLatent": H3ContextLoadLatent,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "H3Context": "H3 Context",
     "H3ContextTrim": "H3 Context Trim",
-    "H3AudioRefine": "H3 Audio Refine",
     "H3ContextSaveLatent": "H3 Context Save Latent",
     "H3ContextLoadLatent": "H3 Context Load Latent",
 }
