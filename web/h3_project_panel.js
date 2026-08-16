@@ -567,22 +567,6 @@ class BranchModal extends ChainTimeline {
     this.createBtn = el("button", { class: "h3p-btn ok",
       text: "Create branch", onclick: () => this.create() });
 
-    this.autoBox = el("input", {
-      type: "checkbox",
-      onchange: (e) => this.toggleAuto(e.target.checked),
-    });
-    this.autoWrap = el("label", { class: "h3p-auto",
-                                  title: "approve every render as it " +
-                                         "finishes, without stopping for " +
-                                         "review" },
-                       this.autoBox, el("span", { text: "Auto-approve" }));
-    this.autoBar = el("div", { class: "h3p-autobar",
-                               style: "display:none;" },
-      el("span", { text: "\u26a0 Auto-approval is on \u2014 the chain is " +
-                         "progressing without manual review" }),
-      el("div", { class: "sp" }),
-      el("button", { class: "h3p-btn", text: "Turn off",
-                     onclick: () => this.toggleAuto(false) }));
     this.overlay = el("div", {
       class: "h3p-overlay",
       onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
@@ -819,6 +803,22 @@ class ProjectModal extends ChainTimeline {
     this.railBody = el("div", { class: "h3p-railbody" });
     this.footText = el("div", {});
 
+    this.autoBox = el("input", {
+      type: "checkbox",
+      onchange: (e) => this.toggleAuto(e.target.checked),
+    });
+    this.autoWrap = el("label", { class: "h3p-auto",
+                                  title: "approve every render as it " +
+                                         "finishes, without stopping for " +
+                                         "review" },
+                       this.autoBox, el("span", { text: "Auto-approve" }));
+    this.autoBar = el("div", { class: "h3p-autobar",
+                               style: "display:none;" },
+      el("span", { text: "\u26a0 Auto-approval is on \u2014 the chain is " +
+                         "progressing without manual review" }),
+      el("div", { class: "sp" }),
+      el("button", { class: "h3p-btn", text: "Turn off",
+                     onclick: () => this.toggleAuto(false) }));
     this.overlay = el("div", {
       class: "h3p-overlay",
       onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
