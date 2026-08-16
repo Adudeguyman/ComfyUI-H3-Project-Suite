@@ -167,6 +167,10 @@ Two of this pack's fixes went upstream in ComfyUI on 13 August 2026 ([#15439](ht
 
 Nothing to do about it. On a ComfyUI that has them, the pack notices and steps back from the video side, keeping only the audio timeline placement — that part is this pack's own and was never upstreamed. On an older ComfyUI it patches as before. Either way it logs what it decided, and the check is on what your build actually does rather than a version number, so it stays right through rebases and backports.
 
+**If joins started jumping a frame or two after a ComfyUI update**, update the pack — that was this pack handing the new ComfyUI a placeholder frame number it no longer needed, which stacked the carried-over frames on the opening instead of spreading them across the overlap. Fixed.
+
+**If the pack reports that it could not patch the layout**, read the log line just above the error: it names whichever module currently owns ComfyUI's layout. If that isn't ComfyUI itself, another pack has claimed it, and `tests/who_patched_layout.py` (run from your ComfyUI folder) will tell you which one.
+
 ---
 
 ## Things to know before you start
@@ -200,6 +204,8 @@ Copy that folder to another machine and carry on there.
 ## Credits
 
 Built on [NikoDemon80's ComfyUI-H3-Motion-Context](https://github.com/NikoDemon80/ComfyUI-H3-Motion-Context), which worked out how to make H3 continue clips at all. The multi-reference fix that keeps voices and character images alive across a chain came from [ethanfel's fork](https://github.com/ethanfel/ComfyUI-H3-Motion-Context), contributed by seitanism.
+
+The full-strength form of seed head carries the mechanism from [drozbay's pull request #15375](https://github.com/Comfy-Org/ComfyUI/pull/15375), vendored from [seitanism's MultiRef fork](https://github.com/seitanism/ComfyUI-H3-Motion-Context-MultiRef) — both GPL-3.0, same lineage as the rest of this pack.
 
 Everything talks to ComfyUI from the outside — no ComfyUI files are modified. If a future update changes something this relies on, the pack notices and stops rather than quietly producing bad renders.
 

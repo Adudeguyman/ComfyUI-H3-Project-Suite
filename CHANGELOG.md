@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased
+
+### Keeping up with ComfyUI
+
+Two of this pack's fixes went upstream on 13 August 2026
+([#15439](https://github.com/Comfy-Org/ComfyUI/pull/15439)): interior
+keyframe anchors, and letting keyframes and references coexist instead
+of references quietly winning.
+
+- The pack now detects that and stands down from the video side, keeping
+  only the audio timeline placement, which was never upstreamed. On
+  older ComfyUI it patches as before. The check is on what your build
+  actually does rather than a version number, so it survives rebases and
+  backports.
+- **Fixed a two-frame skip at every join** on those newer builds. The
+  pack's pinned blocks carried a placeholder index with the real one
+  alongside - a habit from when interior values were rejected. Handing
+  that placeholder to a core that now places anchors properly stacked
+  every block on the first frame, so the model held only the opening and
+  let go early, and the trim then cut real footage. The blocks now tell
+  ComfyUI the truth and let it do the placing.
+- When something else has replaced ComfyUI's layout, the log now names
+  it instead of guessing, and `tests/who_patched_layout.py` finds which
+  pack is responsible.
+- `tests/new_core_probe.py` fakes both eras of ComfyUI and checks the
+  pack does the right thing on each.
+
+### seed_head at full strength
+
+On newer ComfyUI, seed head no longer runs in its weaker form. The
+pack carries the mechanism from upstream pull request
+[#15375](https://github.com/Comfy-Org/ComfyUI/pull/15375) - not merged
+yet - as a runtime layer vendored from the
+[MultiRef fork](https://github.com/seitanism/ComfyUI-H3-Motion-Context-MultiRef),
+GPL-3.0, the PR itself by drozbay.
+
+Held frames now read as *given* content from the first sampling step
+rather than as the model's own unfinished work, and `head_hold` grades
+the conditioning as well as the picture. Nothing on disk changes: it
+loads into memory when seed head first runs, a restart reverts it,
+native support wins if ComfyUI ever ships this, and a partly-native
+ComfyUI is refused rather than half-patched. The log says which form
+you got.
+
+### Measuring drift
+
+**Measure drift** in the Hub samples every clip and reports how
+brightness, contrast, sharpness and colour move across the chain - as a
+total, as a rate per clip, and as a bar per clip for whichever moved
+most. Descriptive statistics, not a quality score: they move with
+content too, so the trend across a continuous scene is what to read.
+
 ## 1.1.0
 
 ### Levelling a join
@@ -45,25 +97,6 @@ let the model repaint it slightly.
 
 `video_source` now defaults to `latent`, which is what every example
 workflow and the whole project layer already used.
-
-### Measuring drift
-
-**Measure drift** in the Hub samples every clip and reports how
-brightness, contrast, sharpness and colour move across the chain - as a
-total, as a rate per clip, and as a bar per clip for whichever moved
-most. Descriptive statistics, not a quality score: they move with
-content too, so the trend across a continuous scene is what to read.
-
-### seed_head at full strength
-
-On PR-15439 cores, seed_head now activates a vendored runtime layer
-carrying the PR #15375 mechanism (per-row cond-timestep for masked
-rows), from seitanism's MultiRef fork of the NikoDemon80 lineage,
-GPL-3.0, credit drozbay/AbleJones for the upstream PR. Capability-
-aware: native support wins, only missing pieces install, in memory,
-restart reverts, partial-native cores are refused loudly. Held rows
-now read as given content from step one, and head_hold grades the
-conditioning. Older cores keep stock seed_head unchanged.
 
 ### Diagnostics
 
