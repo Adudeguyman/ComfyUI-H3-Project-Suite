@@ -207,21 +207,16 @@ def _register():
         })
 
     @routes.post("/h3_suite/project/auto_approve")
-    async def auto_approve(request):
+    @_json_post
+    def auto_approve(body):
         """Turn this project's review gate off, or back on."""
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        try:
-            p = _project(request)
-            on = p.set_auto_approve(bool(body.get("on")))
-        except ProjectError as exc:
-            return web.json_response({"error": str(exc)}, status=400)
+        import folder_paths as fp
+        p = Project(fp.get_output_directory(), body.get("name"))
+        on = p.set_auto_approve(bool(body.get("on")))
         _LOG.warning(
             "h3_suite: project %r auto-approve %s", p.name,
             "ON - the chain will progress without review" if on else "off")
-        return web.json_response({"auto_approve": on})
+        return _state(p)
 
     @routes.get("/h3_suite/project/drift")
     async def drift(request):

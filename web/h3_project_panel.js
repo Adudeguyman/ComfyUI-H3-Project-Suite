@@ -1467,13 +1467,8 @@ class ProjectModal extends ChainTimeline {
 
   async setAuto(on) {
     try {
-      const r = await api.fetchApi("/h3_suite/project/auto_approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: this.name(), on: !!on }),
-      });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
+      await post("/h3_suite/project/auto_approve",
+                 { name: this.name(), on: !!on });
     } catch (e) { toast(e.message, true); }
     this.refresh(true);
   }
