@@ -8,6 +8,20 @@ This suite fixes that, then wraps a project manager around it so you aren't hand
 
 The short version of how: in its default *latent* mode, each clip is handed to the next one in the model's own internal format rather than as pictures and sound. There's no decoding between clips, so the handoff doesn't cost you a conversion the way traditional extension methods do. It isn't magic — the model still does what the model does — but the quality loss that comes from the plumbing is largely removed, which should let you go further before a chain starts looking tired. You never have to think about this; it's just the default.
 
+**A context window manager that gets out of your way to make things easy.**
+
+The idea is simple — create and automate your video extensions without getting in your way. Instead of trying to be a full-blown all-in-one node, this one is focused to handle the technical complexities of managing clips without disrupting your favorite workflow. Use your own prompt editors, media loaders, and custom nodes that you know and love. Then once your run is done, open the project manager, review, compare takes, approve for the next clip, and move on. Once you're done, a one-click export dumps your finished output into your project folder. No fluff.
+
+(Although I do recommend checking out my [Prompt Builder and Media Management suite](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder).)
+
+![The H3 Project Suite nodes in a workflow](docs/images/nodes.png)
+
+*The humble nodes that sit in your workflow, giving you a quick reference to the current chain's status without taking up space.*
+
+![The project manager panel](docs/images/project-manager.png)
+
+*The pop-up project manager. Easy to use, and stays out of your way.*
+
 ---
 
 ## What you get
