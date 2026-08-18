@@ -47,6 +47,7 @@ from .patch_layout import (
     MC_AUDIO_KEY,
     apply_patch as apply_layout_patch,
     is_applied,
+    is_covered as layout_covered,
 )
 from .patch_payload import (
     apply_patch as apply_payload_patch,
@@ -71,7 +72,12 @@ def _activate_inline_patches():
     """
     layout_ok = apply_layout_patch()
     payload_ok = apply_payload_patch()
-    if not layout_ok or not is_applied():
+    # layout_ok is False both when the patch failed AND when somebody
+    # else already covers this - another pack in the same lineage, or a
+    # ComfyUI that does it natively. Only the first is a reason to stop.
+    if not layout_ok and layout_covered():
+        layout_ok = True
+    if not layout_ok or not (is_applied() or layout_covered()):
         raise RuntimeError(
             "h3_suite: the inline layout patch could not be enabled, so "
             "interior anchors would be rejected by ComfyUI. Check the log "

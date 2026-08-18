@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Coexisting with the other H3 motion-context packs
+
+Several packs in this lineage lift the same ComfyUI restriction and use
+the same keyframe convention. If two of them patched the layout at once,
+both corrections ran and every anchor landed twice as far along -
+silently, and looking like a model problem rather than a conflict.
+
+The pack now marks its own wrapper and recognises the others', standing
+down when one of them already owns the constructor: it uses the same
+convention, so it places our anchors correctly. Standing down still
+counts as covered, so the node renders normally instead of refusing.
+Their pack already detected ours; this closes the other direction.
+
 ### Auto-approve
 
 A per-project toggle in the panel's top bar that turns off the review

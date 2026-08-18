@@ -195,6 +195,8 @@ Nothing to do about it. On a ComfyUI that has them, the pack notices and steps b
 
 **If joins started jumping a frame or two after a ComfyUI update**, update the pack — that was this pack handing the new ComfyUI a placeholder frame number it no longer needed, which stacked the carried-over frames on the opening instead of spreading them across the overlap. Fixed.
 
+**Running this alongside another H3 motion-context pack** is fine. Several packs descend from the same ancestor and all adjust ComfyUI's layout the same way; whichever loads first does the job, and the others recognise it and leave it alone. The node names don't collide either, so both appear in your menu. What you should not do is wire both into the same chain — pick one to manage a given project.
+
 **If the pack reports that it could not patch the layout**, read the log line just above the error: it names whichever module currently owns ComfyUI's layout. If that isn't ComfyUI itself, another pack has claimed it, and `tests/who_patched_layout.py` (run from your ComfyUI folder) will tell you which one.
 
 ---

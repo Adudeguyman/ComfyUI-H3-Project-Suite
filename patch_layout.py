@@ -41,6 +41,17 @@ import torch
 
 import comfy.ldm.minimax.model as mm
 
+# Packs in this lineage all lift the same first/last restriction and all
+# smuggle the real index under MC_KEY, so two of them patching the same
+# constructor would apply the same correction twice and shift every
+# anchor. Each pack marks its own wrapper; seeing ANY of these means
+# somebody already owns the constructor and does the same job we would.
+LAYOUT_MARKER = "_h3_project_suite_layout_patch"
+KNOWN_LAYOUT_MARKERS = (
+    LAYOUT_MARKER,
+    "_h3_motion_context_layout_patch",   # NikoDemon80/ComfyUI-H3-Motion-Context
+)
+
 MC_KEY = "motion_context_index"
 MC_AUDIO_KEY = "motion_context_audio_end_frame"
 _LOG = logging.getLogger("h3_suite")
@@ -48,6 +59,7 @@ _LOG = logging.getLogger("h3_suite")
 _orig_init = None
 _applied = False
 _mode = None      # "full" | "audio_only" once applied
+_deferred_to = None   # set when somebody else already covers this
 
 
 def _ref_cursor_advance(refs):
@@ -555,6 +567,27 @@ def _audio_self_test():
                            % stray[:6])
 
 
+def _owned_by_a_sibling():
+    """Has another pack in this lineage already patched the layout?
+
+    They mark their wrapper, and they all use the same MC_KEY smuggling
+    convention, so whichever one installed first already places our
+    keyframes correctly. Patching on top would apply the correction
+    twice. Returns the marker found, or None.
+    """
+    init = getattr(getattr(mm, "PackedLayout", None), "__init__", None)
+    if init is None:
+        return None
+    for marker in KNOWN_LAYOUT_MARKERS:
+        if getattr(init, marker, False):
+            return marker
+    # older copies in this family predate markers but are all named the
+    # same way, a habit inherited from the shared ancestor
+    if getattr(init, "__name__", "") == "_patched_init" and not _applied:
+        return "an unmarked copy of this patch"
+    return None
+
+
 def apply_patch():
     global _orig_init, _applied, _mode
     if _applied:
@@ -562,6 +595,15 @@ def apply_patch():
     if not hasattr(mm, "PackedLayout") or not hasattr(mm, "FRAME_RESCALE"):
         _LOG.warning("h3_suite: MiniMax H3 model module missing expected "
                      "attributes, patch not applied")
+        return False
+    sibling = _owned_by_a_sibling()
+    if sibling:
+        global _deferred_to
+        _deferred_to = sibling
+        _LOG.info("h3_suite: another H3 motion-context pack already owns "
+                  "ComfyUI's layout (%s). It uses the same keyframe "
+                  "convention we do, so it places our anchors correctly - "
+                  "leaving it alone rather than correcting twice.", sibling)
         return False
     if _core_handles_interior_anchors():
         # core owns the video anchors now, but the audio timeline
@@ -576,6 +618,7 @@ def apply_patch():
                          "core (%s); pinned audio would sit at the ref "
                          "position instead of the timeline end.", exc)
             return False
+        setattr(_patched_init, LAYOUT_MARKER, True)
         mm.PackedLayout.__init__ = _patched_init
         _mode = "audio_only"
         _applied = True
@@ -604,6 +647,7 @@ def apply_patch():
         _LOG.warning("h3_suite: self-test failed (%s), patch not applied. "
                      "Interior keyframe anchors unavailable.", exc)
         return False
+    setattr(_patched_init, LAYOUT_MARKER, True)
     mm.PackedLayout.__init__ = _patched_init
     _mode = "full"
     _applied = True
@@ -613,3 +657,14 @@ def apply_patch():
 
 def is_applied():
     return _applied
+
+
+def is_covered():
+    """Are interior anchors going to be placed correctly, by anyone?
+
+    True when we patched, when the core does it natively, or when another
+    pack in this lineage already owns the constructor. The node needs
+    this rather than is_applied(): refusing to render because a sibling
+    pack got there first would be worse than the conflict.
+    """
+    return bool(_applied or _deferred_to)
