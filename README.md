@@ -12,7 +12,7 @@ The short version of how: in its default *latent* mode, each clip is handed to t
 
 The idea is simple — create and automate your video extensions without getting in your way. Instead of trying to be a full-blown all-in-one node, this one is focused to handle the technical complexities of managing clips without disrupting your favorite workflow. Use your own prompt editors, media loaders, and custom nodes that you know and love. Then once your run is done, open the project manager, review, compare takes, approve for the next clip, and move on. Once you're done, a one-click export dumps your finished output into your project folder. No fluff.
 
-(Although I do recommend checking out my [Prompt Builder and Media Management suite](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder).)
+(Although I do recommend checking out my [Prompt Builder and Media Management suite](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder) and [Fantastic Loras](https://github.com/Adudeguyman/comfyui_fantastic-loras).)
 
 ![The H3 Project Suite nodes in a workflow](docs/images/nodes.png)
 

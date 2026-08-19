@@ -17,15 +17,17 @@ from the stock template, for the resolution and clip-length helpers).
 ## H3 Project Suite - Prompt Builder AIO.json
 
 The full working setup: image-to-video and reference-to-video paths side
-by side, switchable, with prompt construction and media loading handled by
-[Fantastic MiniMax H3 Prompt Builder](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder).
+by side, switchable, with prompt construction and media handling from
+[Fantastic MiniMax H3 Prompt Builder](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder)
+and lora stacking and seeds from
+[Fantastic Loras](https://github.com/Adudeguyman/comfyui_fantastic-loras).
 Group bypassers pick the active path. This is the one to grow into once
 the loop makes sense.
 
-**Needs:** the Prompt Builder pack above, plus
-[rgthree-comfy](https://github.com/rgthree/rgthree-comfy),
-[ComfyMath](https://github.com/evanspearman/ComfyMath), and
-[KJNodes](https://github.com/kijai/ComfyUI-KJNodes) (Set/Get nodes).
+**Needs:** both Fantastic packs above, plus
+[rgthree-comfy](https://github.com/rgthree/rgthree-comfy) (group bypassers
+and Any Switch) and [KJNodes](https://github.com/kijai/ComfyUI-KJNodes)
+(Set/Get, attention backend, preview override).
 
 ## Using either one
 
