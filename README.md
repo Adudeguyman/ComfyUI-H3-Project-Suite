@@ -135,6 +135,18 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
+## On a big monitor
+
+The panel has a **Scale** control in its top bar, with two separate sliders.
+
+**Window** makes the box bigger. **Text** changes type size only, so the layout rewraps and you get more readable words rather than fewer of them — which is why these are two controls and not one zoom.
+
+Set them, press Apply. It doesn't apply as you drag on purpose: the control sits inside the window it resizes, so a live update would move the slider out from under your pointer mid-drag. Reset puts both back to 100%.
+
+Your setting is remembered in your browser, not in the workflow — it's a property of your monitor, not of the project, so sharing a workflow doesn't ship your 200% to everyone else.
+
+---
+
 ## Skipping review
 
 Normally a finished render waits for you: it sits as pending, and queueing again re-rolls it rather than moving on. **Auto-approve**, in the panel's top bar, turns that off for one project — each render is approved as it arrives and the next queue extends the chain instead.

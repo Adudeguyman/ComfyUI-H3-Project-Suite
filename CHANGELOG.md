@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Panel scaling
+
+A **Scale** control in the panel's top bar, with independent window and
+text axes. Window resizes the box; text changes font size only, so the
+layout rewraps rather than showing less of itself - the two answer
+different questions ("I want more room" against "I can't read this") and
+a single zoom can only satisfy one.
+
+Set-then-Apply rather than live, because the control sits inside the
+window it resizes and a live update moves the slider out from under the
+pointer. Apply highlights when there is something to apply; Reset returns
+both to 100%. Scaled boxes stay clamped to the viewport, so a large
+setting can never push the control that undoes it off-screen, and the
+popover pins itself to 100% so it stays legible at every setting.
+
+Stored per browser in localStorage, not in the workflow: scale belongs to
+a monitor, not to a project.
+
 ## 1.3.0
 
 ### Registry

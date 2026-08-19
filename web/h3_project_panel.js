@@ -22,40 +22,40 @@ const CSS = `
   display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;}
 .h3p-modal{width:min(1240px,95vw);height:min(820px,92vh);display:flex;flex-direction:column;
   background:#191c22;color:#d7dbe2;border:1px solid #303642;border-radius:10px;
-  box-shadow:0 24px 64px rgba(0,0,0,.55);overflow:hidden;font-size:13px;}
+  box-shadow:0 24px 64px rgba(0,0,0,.55);overflow:hidden;font-size:calc(13px * var(--h3p-fs, 1));}
 .h3p-head{display:flex;align-items:center;gap:12px;padding:10px 16px;
   border-bottom:1px solid #2a2f3a;background:#1e222a;}
-.h3p-title{font-weight:600;font-size:14px;letter-spacing:.02em;white-space:nowrap;}
+.h3p-title{font-weight:600;font-size:calc(14px * var(--h3p-fs, 1));letter-spacing:.02em;white-space:nowrap;}
 .h3p-title small{color:#8a93a3;font-weight:400;margin-left:8px;}
 .h3p-select{background:#12151b;color:#d7dbe2;border:1px solid #2a2f3a;border-radius:7px;
-  padding:5px 8px;font-size:12px;min-width:160px;}
+  padding:5px 8px;font-size:calc(12px * var(--h3p-fs, 1));min-width:160px;}
 .h3p-btn{background:#12151b;border:1px solid #2a2f3a;color:#9aa3b2;padding:5px 12px;
-  border-radius:7px;cursor:pointer;font-size:12px;white-space:nowrap;}
+  border-radius:7px;cursor:pointer;font-size:calc(12px * var(--h3p-fs, 1));white-space:nowrap;}
 .h3p-btn:hover{color:#fff;border-color:#59637a;}
 .h3p-btn.ok{color:#7ec87e;border-color:#2e4a2e;} .h3p-btn.ok:hover{border-color:#7ec87e;}
 .h3p-btn.warn{color:#e0a94c;border-color:#4a3d20;} .h3p-btn.warn:hover{border-color:#e0a94c;}
 .h3p-btn.bad{color:#e05a5a;border-color:#4a2424;} .h3p-btn.bad:hover{border-color:#e05a5a;}
-.h3p-x{background:none;border:0;color:#8a93a3;font-size:18px;cursor:pointer;
+.h3p-x{background:none;border:0;color:#8a93a3;font-size:calc(18px * var(--h3p-fs, 1));cursor:pointer;
   padding:2px 8px;margin-left:4px;}
 .h3p-x:hover{color:#fff;}
 .h3p-namewrap{display:none;align-items:center;gap:6px;}
 .h3p-namewrap.on{display:flex;}
 .h3p-input{background:#12151b;color:#d7dbe2;border:1px solid #2a2f3a;border-radius:7px;
-  padding:5px 8px;font-size:12px;width:170px;}
+  padding:5px 8px;font-size:calc(12px * var(--h3p-fs, 1));width:170px;}
 .h3p-input:focus{outline:none;border-color:#59637a;}
 .h3p-body{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:0;}
 @media (max-width:900px){.h3p-body{grid-template-columns:1fr;}}
 .h3p-main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:14px 16px;
   gap:10px;overflow:auto;}
 .h3p-viewhead{display:flex;align-items:baseline;gap:10px;}
-.h3p-viewtitle{font-weight:600;font-size:13px;}
+.h3p-viewtitle{font-weight:600;font-size:calc(13px * var(--h3p-fs, 1));}
 .h3p-viewtitle.pending{color:#e0a94c;}
 .h3p-viewtitle.approved{color:#7ec87e;}
-.h3p-viewsub{color:#8a93a3;font-size:11px;}
+.h3p-viewsub{color:#8a93a3;font-size:calc(11px * var(--h3p-fs, 1));}
 .h3p-player{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
   background:#0d1015;border:1px solid #23272f;border-radius:9px;overflow:hidden;}
 .h3p-player video{max-width:100%;max-height:100%;display:block;background:#000;}
-.h3p-playerempty{color:#5c6472;font-size:12px;text-align:center;line-height:1.7;
+.h3p-playerempty{color:#5c6472;font-size:calc(12px * var(--h3p-fs, 1));text-align:center;line-height:1.7;
   padding:30px;white-space:pre-wrap;}
 .h3p-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .h3p-exportrow{display:flex;align-items:center;min-height:30px;}
@@ -63,18 +63,18 @@ const CSS = `
 .h3p-modes{display:flex;gap:2px;background:#12151b;border:1px solid #2a2f3a;
   border-radius:7px;padding:2px;}
 .h3p-modes button{background:none;border:0;color:#9aa3b2;padding:4px 12px;
-  border-radius:5px;cursor:pointer;font-size:12px;}
+  border-radius:5px;cursor:pointer;font-size:calc(12px * var(--h3p-fs, 1));}
 .h3p-modes button.on{background:#2f3947;color:#fff;}
 .h3p-transport{display:flex;flex-direction:column;gap:5px;}
 .h3p-tbar{display:flex;align-items:center;gap:10px;}
 .h3p-play{background:#12151b;border:1px solid #2a2f3a;color:#d7dbe2;width:30px;
-  height:30px;border-radius:15px;cursor:pointer;font-size:12px;line-height:1;
+  height:30px;border-radius:15px;cursor:pointer;font-size:calc(12px * var(--h3p-fs, 1));line-height:1;
   display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
 .h3p-play:hover{border-color:#59637a;}
-.h3p-time{font-family:ui-monospace,monospace;font-size:11px;color:#8a93a3;
+.h3p-time{font-family:ui-monospace,monospace;font-size:calc(11px * var(--h3p-fs, 1));color:#8a93a3;
   white-space:nowrap;flex:0 0 auto;}
 .h3p-time b{color:#d7dbe2;font-weight:400;}
-.h3p-where{font-family:ui-monospace,monospace;font-size:11px;color:#8a93a3;
+.h3p-where{font-family:ui-monospace,monospace;font-size:calc(11px * var(--h3p-fs, 1));color:#8a93a3;
   padding:2px 0 0 46px;min-height:14px;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;}
 .h3p-scrub{position:relative;flex:1;height:26px;cursor:pointer;
@@ -85,23 +85,23 @@ const CSS = `
 .h3p-seg.approved{background:#2a3a2c;}
 .h3p-seg.pending{background:#3a3120;}
 .h3p-seg.cur{outline:1px solid #59637a;outline-offset:0;}
-.h3p-seg span{position:absolute;left:5px;top:1px;font-size:9px;color:#7d8698;
+.h3p-seg span{position:absolute;left:5px;top:1px;font-size:calc(9px * var(--h3p-fs, 1));color:#7d8698;
   font-family:ui-monospace,monospace;pointer-events:none;}
 .h3p-fill{position:absolute;inset:6px auto 6px 0;background:rgba(111,134,184,.28);
   border-right:2px solid #8fa8d8;pointer-events:none;border-radius:3px 0 0 3px;}
-.h3p-measuring{font-size:10px;color:#5c6472;}
-.h3p-hint{font-size:11px;color:#6b7484;line-height:1.4;}
+.h3p-measuring{font-size:calc(10px * var(--h3p-fs, 1));color:#5c6472;}
+.h3p-hint{font-size:calc(11px * var(--h3p-fs, 1));color:#6b7484;line-height:1.4;}
 .h3p-takes{display:none;align-items:center;gap:6px;}
-.h3p-takelabel{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;}
+.h3p-takelabel{font-size:calc(10px * var(--h3p-fs, 1));text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;}
 
 .h3p-spacer{flex:1;}
 .h3p-confirm{display:none;flex-direction:column;gap:8px;background:#241f14;
   border:1px solid #4a3d20;border-radius:9px;padding:10px 12px;}
 .h3p-confirm.on{display:flex;}
-.h3p-confirm .msg{white-space:pre-wrap;color:#e0c890;font-size:12px;line-height:1.5;}
+.h3p-confirm .msg{white-space:pre-wrap;color:#e0c890;font-size:calc(12px * var(--h3p-fs, 1));line-height:1.5;}
 .h3p-rail{border-left:1px solid #2a2f3a;background:#15181e;display:flex;
   flex-direction:column;min-height:0;}
-.h3p-railhead{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;
+.h3p-railhead{font-size:calc(10px * var(--h3p-fs, 1));text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;
   padding:12px 12px 8px;}
 .h3p-railbody{flex:1;overflow:hidden auto;display:flex;flex-direction:column;gap:8px;
   padding:0 12px 12px;}
@@ -113,14 +113,14 @@ const CSS = `
 .h3p-clip.pending:hover,.h3p-clip.pending.sel{border-color:#e0a94c;}
 .h3p-clip video{width:100%;height:84px;object-fit:cover;display:block;background:#0d1015;
   pointer-events:none;}
-.h3p-clipbar{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:11px;}
-.h3p-clipname{font-family:ui-monospace,monospace;font-size:10px;color:#9aa3b2;}
-.h3p-clipstat{margin-left:auto;font-size:10px;}
+.h3p-clipbar{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:calc(11px * var(--h3p-fs, 1));}
+.h3p-clipname{font-family:ui-monospace,monospace;font-size:calc(10px * var(--h3p-fs, 1));color:#9aa3b2;}
+.h3p-clipstat{margin-left:auto;font-size:calc(10px * var(--h3p-fs, 1));}
 .h3p-clipstat.ok{color:#7ec87e;} .h3p-clipstat.pend{color:#e0a94c;}
-.h3p-tail{font-size:9px;color:#6f86b8;border:1px solid #2b3a52;border-radius:7px;
+.h3p-tail{font-size:calc(9px * var(--h3p-fs, 1));color:#6f86b8;border:1px solid #2b3a52;border-radius:7px;
   padding:0 5px;}
 .h3p-next{border:1px dashed #2e3440;border-radius:8px;padding:10px 8px;text-align:center;
-  font-size:10px;color:#5c6472;line-height:1.5;flex:0 0 auto;}
+  font-size:calc(10px * var(--h3p-fs, 1));color:#5c6472;line-height:1.5;flex:0 0 auto;}
 .h3p-next b{color:#8a93a3;font-family:ui-monospace,monospace;font-weight:400;}
 .h3p-driftwrap{position:absolute;inset:0;background:rgba(10,12,16,.72);
   display:none;align-items:center;justify-content:center;z-index:40;}
@@ -129,43 +129,60 @@ const CSS = `
   border-radius:10px;width:min(680px,92%);max-height:86%;overflow:auto;}
 .h3p-driftwrap .head{display:flex;align-items:center;gap:8px;
   padding:10px 14px;border-bottom:1px solid #232833;color:#d7dbe2;
-  font-size:13px;}
+  font-size:calc(13px * var(--h3p-fs, 1));}
 .h3p-driftwrap .body{padding:14px;}
-table.h3p-drift{width:100%;border-collapse:collapse;font-size:12px;
+table.h3p-drift{width:100%;border-collapse:collapse;font-size:calc(12px * var(--h3p-fs, 1));
   color:#c3c9d4;}
 table.h3p-drift th{text-align:left;font-weight:400;color:#7d8697;
-  padding:4px 8px;border-bottom:1px solid #262c38;font-size:11px;}
+  padding:4px 8px;border-bottom:1px solid #262c38;font-size:calc(11px * var(--h3p-fs, 1));}
 table.h3p-drift td{padding:5px 8px;border-bottom:1px solid #1e232d;}
 table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
 .h3p-spark{margin-top:14px;}
-.h3p-spark .lbl{font-size:11px;color:#7d8697;margin-bottom:5px;}
+.h3p-spark .lbl{font-size:calc(11px * var(--h3p-fs, 1));color:#7d8697;margin-bottom:5px;}
 .h3p-spark .bars{display:flex;align-items:flex-end;gap:3px;height:40px;}
 .h3p-spark .bars i{flex:1;background:#3b4657;border-radius:2px 2px 0 0;}
-.h3p-note{font-size:11px;color:#7d8697;line-height:1.5;margin:14px 0 0;}
+.h3p-note{font-size:calc(11px * var(--h3p-fs, 1));color:#7d8697;line-height:1.5;margin:14px 0 0;}
+.h3p-scalewrap{position:relative;}
+.h3p-scalemenu{--h3p-fs:1;position:absolute;right:0;top:100%;margin-top:6px;
+  z-index:20;display:none;width:300px;background:#1e222a;
+  border:1px solid #3a4252;border-radius:9px;padding:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.5);}
+.h3p-scalemenu.on{display:block;}
+.h3p-scalerow{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.h3p-scalerow label{width:58px;color:#8a93a3;
+  font-size:calc(11px * var(--h3p-fs, 1));}
+.h3p-scalerow input[type=range]{flex:1;accent-color:#5b8cff;min-width:0;}
+.h3p-scalerow input[type=number]{width:56px;background:#141821;
+  border:1px solid #333c4c;border-radius:6px;color:#dfe4ee;padding:3px 6px;
+  font-size:calc(11px * var(--h3p-fs, 1));}
+.h3p-scalefoot{display:flex;gap:6px;align-items:center;}
+.h3p-scalefoot .sp{flex:1;}
+.h3p-scalenote{color:#6f7787;font-size:calc(10px * var(--h3p-fs, 1));
+  margin:2px 0 8px;line-height:1.35;}
 .h3p-autowarn{color:#ff5c5c;font-weight:600;line-height:1.35;
   margin-bottom:4px;}
 .h3p-autobar{display:flex;align-items:center;gap:8px;padding:7px 12px;
   background:rgba(255,60,60,.10);border:1px solid rgba(255,92,92,.45);
-  border-radius:7px;color:#ff5c5c;font-size:12px;font-weight:600;
+  border-radius:7px;color:#ff5c5c;font-size:calc(12px * var(--h3p-fs, 1));font-weight:600;
   margin:0 16px 10px;}
 .h3p-autobar .sp{flex:1;}
 .h3p-auto{display:flex;align-items:center;gap:6px;cursor:pointer;
-  user-select:none;font-size:12px;color:#8a93a3;}
+  user-select:none;font-size:calc(12px * var(--h3p-fs, 1));color:#8a93a3;}
 .h3p-auto.on{color:#ff5c5c;font-weight:600;}
 .h3p-auto input{accent-color:#ff5c5c;cursor:pointer;margin:0;}
 .h3p-foot{display:flex;align-items:center;gap:8px;padding:9px 16px;
-  border-top:1px solid #2a2f3a;background:#171a20;font-size:11px;color:#7d8698;}
+  border-top:1px solid #2a2f3a;background:#171a20;font-size:calc(11px * var(--h3p-fs, 1));color:#7d8698;}
 .h3p-toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;
   background:#1e222a;border:1px solid #3a4252;color:#d7dbe2;border-radius:9px;
-  padding:9px 16px;font-size:12px;box-shadow:0 12px 32px rgba(0,0,0,.5);
+  padding:9px 16px;font-size:calc(12px * var(--h3p-fs, 1));box-shadow:0 12px 32px rgba(0,0,0,.5);
   font-family:system-ui,sans-serif;}
 .h3p-toast.bad{border-color:#7a3a3a;color:#e8b0b0;}
 .h3p-summary{background:#12151b;border:1px solid #2e3440;border-radius:7px;
-  padding:7px 10px;font-size:11px;line-height:1.55;color:#9aa3b2;
+  padding:7px 10px;font-size:calc(11px * var(--h3p-fs, 1));line-height:1.55;color:#9aa3b2;
   font-family:system-ui,sans-serif;overflow:hidden;}
 .h3p-summary b{color:#d7dbe2;font-weight:600;}
 .h3p-summary .pend{color:#e0a94c;} .h3p-summary .ok{color:#7ec87e;}
-.h3p-summary .nx{font-family:ui-monospace,monospace;font-size:10px;color:#6f86b8;}
+.h3p-summary .nx{font-family:ui-monospace,monospace;font-size:calc(10px * var(--h3p-fs, 1));color:#6f86b8;}
 `;
 
 function injectCSS() {
@@ -197,6 +214,54 @@ function mb(bytes) {
   if (n >= 1024 * 1024 * 1024) return (n / 1073741824).toFixed(2) + " GB";
   if (n >= 1024 * 1024) return (n / 1048576).toFixed(1) + " MB";
   return Math.max(1, Math.round(n / 1024)) + " KB";
+}
+
+const SCALE_KEY = "h3suite.panelPrefs";
+const SCALE_MIN = 1.0;
+const SCALE_MAX = 3.0;          // window: oversized is merely awkward
+const TEXT_SCALE_MAX = 2.0;     // type: oversized genuinely breaks layouts
+const SCALE_DEFAULTS = { windowScale: 1.0, textScale: 1.0 };
+
+function clampScale(v, max = SCALE_MAX) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(max, Math.max(SCALE_MIN, Math.round(n * 100) / 100));
+}
+
+function loadScalePrefs() {
+  try {
+    const v = { ...SCALE_DEFAULTS,
+      ...JSON.parse(localStorage.getItem(SCALE_KEY) || "{}") };
+    // clamp on the way IN too: a hand-edited or stale entry must not be
+    // able to inject NaN or 900% into a running panel
+    v.windowScale = clampScale(v.windowScale);
+    v.textScale = clampScale(v.textScale, TEXT_SCALE_MAX);
+    return v;
+  } catch (e) {
+    return { ...SCALE_DEFAULTS };
+  }
+}
+
+function saveScalePrefs(prefs) {
+  try { localStorage.setItem(SCALE_KEY, JSON.stringify(prefs)); }
+  catch (e) { /* private mode: the session's choice still applies */ }
+}
+
+// Text scale rides one custom property on documentElement, because
+// overlays and popovers attach to <body> and are not descendants of the
+// modal. Window scale is per-box, so each modal applies its own.
+function applyTextScale(prefs) {
+  document.documentElement.style.setProperty(
+    "--h3p-fs", String(clampScale(prefs.textScale, TEXT_SCALE_MAX)));
+}
+
+function sizeScaledBox(box, baseW, baseH, prefs) {
+  if (!box?.style) return;
+  const w = clampScale(prefs.windowScale);
+  // the viewport clamps are load-bearing: without them a 300% window on a
+  // laptop pushes its own header - including this control - off-screen
+  box.style.width = `min(${Math.round(baseW * w)}px, 95vw)`;
+  if (baseH) box.style.height = `min(${Math.round(baseH * w)}px, 92vh)`;
 }
 
 function toast(msg, bad = false) {
@@ -608,6 +673,12 @@ class BranchModal extends ChainTimeline {
 
   async open() {
     document.body.append(this.overlay);
+    // a nested overlay inherits text scale via documentElement, but its
+    // own box needs sizing from the same stored preference
+    try {
+      sizeScaledBox(this.overlay.querySelector(".h3p-modal"),
+                    1240, 720, loadScalePrefs());
+    } catch (e) { /* a corrupt entry degrades to 100%, not a broken modal */ }
     document.addEventListener("keydown", this._esc);
     this.transport.style.display = "flex";
     this.showPlayer();
@@ -803,6 +874,19 @@ class ProjectModal extends ChainTimeline {
     this.railBody = el("div", { class: "h3p-railbody" });
     this.footText = el("div", {});
 
+    this.scalePrefs = loadScalePrefs();
+    this.scaleMenu = el("div", { class: "h3p-scalemenu" });
+    this.scaleBtn = el("button", {
+      class: "h3p-btn", text: "Scale",
+      title: "resize this window, or just its text",
+      onclick: (e) => {
+        e.stopPropagation();
+        this.scaleMenu.classList.toggle("on");
+      },
+    });
+    this.scaleWrap = el("div", { class: "h3p-scalewrap" },
+                        this.scaleBtn, this.scaleMenu);
+    this.buildScaleMenu();
     this.autoBox = el("input", {
       type: "checkbox",
       onchange: (e) => this.toggleAuto(e.target.checked),
@@ -821,7 +905,12 @@ class ProjectModal extends ChainTimeline {
                      onclick: () => this.toggleAuto(false) }));
     this.overlay = el("div", {
       class: "h3p-overlay",
-      onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
+      onmousedown: (e) => {
+        if (!this.scaleWrap?.contains(e.target)) {
+          this.scaleMenu?.classList.remove("on");
+        }
+        if (e.target === this.overlay) this.close();
+      },
     },
       el("div", { class: "h3p-modal" },
         el("div", { class: "h3p-head" },
@@ -834,6 +923,7 @@ class ProjectModal extends ChainTimeline {
           this.nameWrap,
           el("div", { class: "h3p-spacer" }),
           this.autoWrap,
+          this.scaleWrap,
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),
@@ -876,6 +966,7 @@ class ProjectModal extends ChainTimeline {
     this._sig = null;
     this.durations = {};
     document.body.append(this.overlay);
+    this.applyScale();
     document.addEventListener("keydown", this._esc);
     api.addEventListener("executed", this._onExec);
     document.addEventListener("visibilitychange", this._onFocus);
@@ -1448,6 +1539,93 @@ class ProjectModal extends ChainTimeline {
     }
     this.render();
     this.node._h3RefreshSummary?.();
+  }
+
+  buildScaleMenu() {
+    // Set-then-Apply, not live. This control sits INSIDE the thing it
+    // resizes: applying on input means the first pixel of slider travel
+    // moves the popover out from under the pointer and the drag dies.
+    const pending = { ...this.scalePrefs };
+    const inputs = {};
+    const outs = {};
+
+    const dirty = () => this.scaleApply.classList.toggle("primary",
+      pending.windowScale !== this.scalePrefs.windowScale ||
+      pending.textScale !== this.scalePrefs.textScale);
+
+    const row = (key, label, max) => {
+      const pct = () => Math.round(pending[key] * 100);
+      const range = el("input", {
+        type: "range", min: String(SCALE_MIN * 100), max: String(max * 100),
+        step: "5", value: String(pct()),
+        oninput: (e) => {
+          pending[key] = clampScale(Number(e.target.value) / 100, max);
+          outs[key].value = String(Math.round(pending[key] * 100));
+          dirty();
+        },
+      });
+      const num = el("input", {
+        type: "number", min: String(SCALE_MIN * 100),
+        max: String(max * 100), step: "5", value: String(pct()),
+        oninput: (e) => {
+          pending[key] = clampScale(Number(e.target.value) / 100, max);
+          inputs[key].value = String(Math.round(pending[key] * 100));
+          dirty();
+        },
+        // without this the modal's own Enter/Escape handling sees the
+        // keystroke and can close the dialog mid-type
+        onkeydown: (e) => {
+          if (e.key === "Enter") { e.stopPropagation(); e.target.blur(); }
+        },
+      });
+      inputs[key] = range;
+      outs[key] = num;
+      return el("div", { class: "h3p-scalerow" },
+                el("label", { text: label }), range, num,
+                el("span", { class: "h3p-scalenote", text: "%" }));
+    };
+
+    this.scaleApply = el("button", { class: "h3p-btn", text: "Apply",
+      onclick: () => this.setScale(pending.windowScale, pending.textScale,
+                                   inputs, outs) });
+
+    this.scaleMenu.append(
+      el("div", { class: "h3p-scalenote",
+                  text: "Window resizes the box. Text changes type size " +
+                        "only, so the layout rewraps instead of showing " +
+                        "less. Remembered in this browser." }),
+      row("windowScale", "Window", SCALE_MAX),
+      row("textScale", "Text", TEXT_SCALE_MAX),
+      el("div", { class: "h3p-scalefoot" },
+        el("button", { class: "h3p-btn", text: "Reset",
+                       onclick: () => this.setScale(1, 1, inputs, outs) }),
+        el("div", { class: "sp" }),
+        this.scaleApply,
+        el("button", { class: "h3p-btn", text: "Close",
+                       onclick: () => this.scaleMenu.classList
+                         .remove("on") })));
+  }
+
+  setScale(w, t, inputs, outs) {
+    this.scalePrefs.windowScale = clampScale(w);
+    this.scalePrefs.textScale = clampScale(t, TEXT_SCALE_MAX);
+    // push committed values back into every control, or Reset leaves the
+    // sliders showing the old position
+    for (const [k, max] of [["windowScale", SCALE_MAX],
+                            ["textScale", TEXT_SCALE_MAX]]) {
+      const pct = String(Math.round(clampScale(this.scalePrefs[k], max) * 100));
+      if (inputs?.[k]) inputs[k].value = pct;
+      if (outs?.[k]) outs[k].value = pct;
+    }
+    saveScalePrefs(this.scalePrefs);
+    this.applyScale();
+    this.scaleApply?.classList.remove("primary");
+  }
+
+  applyScale() {
+    sizeScaledBox(this.overlay?.querySelector(".h3p-modal"),
+                  1240, 820, this.scalePrefs);
+    applyTextScale(this.scalePrefs);
   }
 
   async toggleAuto(on) {
