@@ -44,7 +44,7 @@ Repository = "https://github.com/Adudeguyman/ComfyUI-H3-Project-Suite"
 Issues = "https://github.com/Adudeguyman/ComfyUI-H3-Project-Suite/issues"
 
 [tool.comfy]
-PublisherId = "fantastic-loras"
+PublisherId = "adudeguyman"
 DisplayName = "H3 Project Suite"
 Icon = ""
 # The panel is served from web/ by the pack's own WEB_DIRECTORY.
