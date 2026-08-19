@@ -1,0 +1,56 @@
+[project]
+name = "comfyui-h3-project-suite"
+description = "Long-form video with MiniMax H3. Chain clips that genuinely continue each other in picture and sound, managed as a project with review, takes, branching and one-click export. Each clip is handed to the next in latent space, so no decode and re-encode round trip sits between them."
+version = "1.3.0"
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Adudeguyman" },
+]
+keywords = [
+    "comfyui",
+    "minimax-h3",
+    "video-generation",
+    "audio",
+    "clip-chaining",
+    "video-continuation",
+    "project-management",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Operating System :: OS Independent",
+]
+# av and numpy drive the export, the join level matcher and the drift
+# report. Both ship with most ComfyUI installs; they are declared so a
+# bare environment installs them rather than losing those features.
+dependencies = [
+    "av",
+    "numpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/Adudeguyman/ComfyUI-H3-Project-Suite"
+Repository = "https://github.com/Adudeguyman/ComfyUI-H3-Project-Suite"
+Issues = "https://github.com/Adudeguyman/ComfyUI-H3-Project-Suite/issues"
+
+[tool.comfy]
+PublisherId = "fantastic-loras"
+DisplayName = "H3 Project Suite"
+Icon = ""
+# The panel is served from web/ by the pack's own WEB_DIRECTORY.
+web = "web"
+# Interior keyframe anchors and keyframes coexisting with references
+# landed in ComfyUI 0.33.1. The pack still runs on older builds - it
+# patches them itself and says so - but that is the first version where
+# nothing needs patching.
+requires-comfyui = ">=0.33.1"

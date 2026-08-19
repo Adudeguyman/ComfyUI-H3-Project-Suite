@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
+
+### Registry
+
+The pack carries `pyproject.toml` again, so it can be published to the
+Comfy Registry. It declares `av` and `numpy` - which drive export, join
+level matching and the drift report - and a minimum ComfyUI of 0.33.1,
+the first release where nothing needs patching. Older builds still work;
+the pack patches them itself and says so.
+
+The licence now names both the original author and this fork, and the
+packs whose code it carries.
 
 ### Coexisting with the other H3 motion-context packs
 
