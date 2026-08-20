@@ -80,7 +80,7 @@ def _vae_names_from_workflow(project, basename):
     return names
 
 
-def load_vaes_for(project, clips):
+def load_vaes_for(project, clips, names=None):
     """Load the VAEs a chain was rendered with, without a render.
 
     Registration from H3 Context only happens when that node executes,
@@ -89,23 +89,26 @@ def load_vaes_for(project, clips):
     so the filenames are already on disk; this loads them the same way
     ComfyUI would and classifies each by what it turns out to be.
     """
-    if "video" in _VAES:
+    if not names and "video" in _VAES:
         return dict(_VAES)
     import comfy.sd
     import comfy.utils
     import folder_paths
 
-    seen = []
+    # names given by the caller win: the panel reads them straight off
+    # the loaders wired into the Hub, which is the least guessy source
+    # there is and needs nothing to have run
+    seen = [n for n in (names or []) if n]
     for c in clips:
         for n in _vae_names_from_workflow(project, c["basename"]):
             if n not in seen:
                 seen.append(n)
     if not seen:
         raise RuntimeError(
-            "h3_suite: the takes' workflows name no VAE loader, so the "
-            "export cannot tell which decoders to use. Wire the video "
-            "and audio VAEs into H3 Context and queue one clip, then "
-            "export again.")
+            "h3_suite: no VAE files to work with. Wire the H3 video and "
+            "audio VAEs into the Project Hub node's vae and audio_vae "
+            "inputs - the panel reads them straight from the loaders, "
+            "so nothing needs to run first.")
 
     found = {}
     problems = []
@@ -245,7 +248,7 @@ def _clip_meta(project, basename):
 
 
 def export_from_latents(project, clips, master_path, level_match=True,
-                        crf=17):
+                        crf=17, vae_names=None):
     """Decode approved takes one at a time into a single encode."""
     av, np = _require()
     try:
@@ -255,7 +258,7 @@ def export_from_latents(project, clips, master_path, level_match=True,
     # the running graph's VAEs when a clip has been queued this session,
     # otherwise loaded from the takes' own recorded workflow - exporting
     # must not require having generated something first
-    ready = load_vaes_for(project, clips)
+    ready = load_vaes_for(project, clips, names=vae_names)
     vae = ready["video"]
     audio_vae = ready.get("audio")
 

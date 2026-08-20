@@ -213,10 +213,21 @@ def main():
     try:
         ex.export_from_latents(p, clips[:1], os.path.join(root, "m6.mp4"))
     except RuntimeError as exc:
-        assert "no VAE loader" in str(exc), exc
-        print("6. sidecar names no VAE: told to wire them and queue once")
+        assert "Project Hub node" in str(exc), exc
+        print("6. nothing to go on: told to wire the Hub's VAE inputs")
     else:
         raise AssertionError("must refuse when no VAE can be found")
+
+    # names handed in directly - what the panel does after reading them
+    # off the loaders wired into the Hub - need no sidecar at all
+    open(os.path.join(root, "clip_002_take1.json"), "w").write(
+        json.dumps({"meta": {"frames": 5, "fps": 8}}))
+    out7 = os.path.join(root, "m7.mp4")
+    ex.export_from_latents(p, clips[:2], out7, level_match=False,
+                           vae_names=["h3_video_vae.safetensors",
+                                      "h3_audio_vae.safetensors"])
+    assert os.path.exists(out7), "explicit VAE names should be enough"
+    print("7. explicit names: exported with no sidecar workflow at all")
 
     print("all checks passed")
 

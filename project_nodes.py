@@ -90,6 +90,20 @@ class H3ProjectHub:
                                "make a typo fail loudly instead of quietly "
                                "starting a fresh empty project."}),
             },
+            "optional": {
+                # These are not used to render anything. The panel reads
+                # the graph to see which loaders they come from, so
+                # Import can encode footage with the same VAEs this
+                # chain renders with - no guessing, and nothing has to
+                # run first.
+                "vae": ("VAE", {
+                    "tooltip": "Optional. Wire the H3 video VAE here and "
+                               "the panel's Import can encode footage "
+                               "without you picking files."}),
+                "audio_vae": ("VAE", {
+                    "tooltip": "Optional. The H3 audio VAE, so imported "
+                               "footage keeps its sound."}),
+            },
         }
 
     RETURN_TYPES = ("H3_PROJECT", "LATENT", "BOOLEAN", "STRING")
@@ -112,7 +126,7 @@ class H3ProjectHub:
         except Exception:
             return float("NaN")
 
-    def resolve(self, project_name, create_if_missing=True):
+    def resolve(self, project_name, create_if_missing=True, vae=None, audio_vae=None):
         out_dir = folder_paths.get_output_directory()
         p = Project(out_dir, project_name, create=bool(create_if_missing))
 

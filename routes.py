@@ -390,7 +390,8 @@ def _register():
             try:
                 info = export_from_latents(
                     p, clips, master,
-                    level_match=bool(body.get("level_match", True)))
+                    level_match=bool(body.get("level_match", True)),
+                    vae_names=body.get("vae_names") or None)
             except RuntimeError as exc:
                 raise ProjectError(str(exc))
             return {"exported": fname, "from_latents": True,
@@ -626,7 +627,8 @@ def _register():
                 width=int(body.get("width") or 0),
                 height=int(body.get("height") or 0),
                 crop=body.get("crop") or "center",
-                with_audio=bool(body.get("with_audio", True)))
+                with_audio=bool(body.get("with_audio", True)),
+                vae_names=body.get("vae_names") or None)
         except RuntimeError as exc:
             raise ProjectError(str(exc))
         out = _state(p)

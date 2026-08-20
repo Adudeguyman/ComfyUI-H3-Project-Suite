@@ -824,6 +824,33 @@ class BranchModal extends ChainTimeline {
 /* ------------------------------------------------------------------ */
 
 
+/** Filenames of the VAE loaders wired into a node's inputs.
+ *
+ * Reading the graph, not running it: follow the link on each named
+ * input back to whatever feeds it and take that node's first widget
+ * value, which for every VAE loader is the filename. Nothing has to
+ * execute, so Import works on an empty project in a fresh session.
+ */
+function wiredVaeNames(node, inputNames = ["vae", "audio_vae"]) {
+  const out = [];
+  try {
+    const graph = node?.graph || app?.graph;
+    if (!graph || !node?.inputs) return out;
+    for (const want of inputNames) {
+      const slot = node.inputs.find((i) => i && i.name === want);
+      if (!slot || slot.link == null) continue;
+      const link = graph.links?.[slot.link];
+      if (!link) continue;
+      const src = graph.getNodeById?.(link.origin_id);
+      const vals = src?.widgets_values;
+      const name = Array.isArray(vals) ? vals.find(
+        (v) => typeof v === "string" && v.trim()) : null;
+      if (name && out.indexOf(name) === -1) out.push(name);
+    }
+  } catch (e) { /* an unreadable graph just means no names */ }
+  return out;
+}
+
 /** Pick a window out of a source video, seeing exactly what is cut.
  *
  * H3 can only render certain lengths (5, 22, 39, 56 ... frames), so
@@ -1000,6 +1027,23 @@ class ImportModal {
       ? prefer : files[0].rel;
     this.picker.value = pick;
     await this.choose(pick);
+    this.checkVaes();
+  }
+
+  checkVaes() {
+    const names = wiredVaeNames(this.panel.node);
+    const ok = names.length > 0;
+    this.importBtn.disabled = !ok;
+    this.importBtn.title = ok
+      ? `encoding with ${names.join(" and ")}`
+      : "wire the VAEs into the Project Hub node first";
+    if (!ok) {
+      this.info2.innerHTML =
+        `<span class="drop">Wire the H3 video and audio VAEs into the ` +
+        `Project Hub node's <b>vae</b> and <b>audio_vae</b> inputs, then ` +
+        `reopen this window. Importing has to encode the footage, and ` +
+        `those inputs are how it knows which models to use.</span>`;
+    }
   }
 
   async choose(rel) {
@@ -1155,6 +1199,8 @@ class ImportModal {
       (drop ? `<span class="drop">dropping ${drop} frame${
         drop === 1 ? "" : "s"} (${(drop / 24).toFixed(2)}s)</span>` : "") +
       (i.has_audio ? "" : "<span>no audio track</span>");
+    const names = wiredVaeNames(this.panel.node);
+    if (!names.length) this.checkVaes();
   }
 
   async doImport() {
@@ -1167,6 +1213,7 @@ class ImportModal {
         start: this.start, frames: this.len,
         width: this.info.width, height: this.info.height,
         crop: "center", with_audio: !!this.info.has_audio,
+        vae_names: wiredVaeNames(this.panel.node),
       });
       const im = out.imported || {};
       toast(`imported as ${im.basename} \u2014 review it, then approve`);
@@ -1751,6 +1798,7 @@ class ProjectModal extends ChainTimeline {
       const out = await post("/h3_suite/project/export", {
         name: this.name(), include_pending: this._exportPending,
         filename, use_latents: fromLatents,
+        vae_names: fromLatents ? wiredVaeNames(this.node) : undefined,
       });
       const lm = (out.level_matched || []).length;
       const what = out.preview ? "preview" : "master";

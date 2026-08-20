@@ -12,6 +12,12 @@ is chosen by looking at it rather than described afterwards. It opens
 on the longest valid window anchored at the end, since imported footage
 usually runs into a chain.
 
+The Project Hub node gained optional `vae` and `audio_vae` inputs. They
+render nothing; the panel reads the graph to see which loaders feed them
+and encodes imported footage with those, so importing works on an empty
+project in a fresh session with nothing queued. Exporting from latents
+uses the same source.
+
 Files arrive by drag and drop onto the window, or through a normal file
 picker; both copy into ComfyUI's input folder, which is also still
 browsed for anything already there. Anything not at 24 fps is remapped

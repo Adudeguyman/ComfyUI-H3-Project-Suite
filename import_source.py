@@ -299,7 +299,7 @@ def read_audio(path, start, frames, source_fps=None, target_sr=32000):
 
 
 def import_window(project, path, start, frames, width, height,
-                  crop="center", with_audio=True):
+                  crop="center", with_audio=True, vae_names=None):
     """Decode a window, encode it, and write it into the project.
 
     Everything the chain needs for a first clip: the AV latent, the
@@ -318,7 +318,7 @@ def import_window(project, path, start, frames, width, height,
             "h3_suite: %d frames is not a length H3 can render. Valid "
             "lengths are 5, 22, 39, 56 and so on." % frames)
 
-    vaes = load_vaes_for(project, project.clips)
+    vaes = load_vaes_for(project, project.clips, names=vae_names)
     vae = vaes["video"]
     audio_vae = vaes.get("audio")
 
