@@ -141,6 +141,8 @@ Press **Import…** in the panel to bring in outside footage — a live-action p
 
 H3 runs at 24fps and can only render certain lengths (5, 22, 39, 56 … frames), so importing always means dropping a few frames. **You choose which ones, by looking at them.** The import window shows a filmstrip of the whole source with your kept span lit and the dropped ends dimmed. Drag the span, scrub the video underneath, press Play window to watch just what you're keeping. The length picker only offers lengths H3 can actually render, so an invalid window can't be chosen.
 
+Getting a video in takes no file management: drop one anywhere on the import window, or press **Choose…** and pick it from your computer. It's copied into ComfyUI's input folder and selected. Anything already in there shows up in the list too.
+
 It opens with the longest valid window anchored at the *end* of the footage, since imported clips usually run into a chain rather than out of one.
 
 Anything not already at 24fps is remapped by picking frames, never by blending — no invented pixels. Audio comes along when the file has it. The imported clip lands as clip 1, pending review, so you watch it in the player like any other take before approving.

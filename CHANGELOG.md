@@ -12,8 +12,10 @@ is chosen by looking at it rather than described afterwards. It opens
 on the longest valid window anchored at the end, since imported footage
 usually runs into a chain.
 
-Anything not at 24 fps is remapped by picking frames rather than
-blending them. Audio comes along when the file has one. The result is
+Files arrive by drag and drop onto the window, or through a normal file
+picker; both copy into ComfyUI's input folder, which is also still
+browsed for anything already there. Anything not at 24 fps is remapped
+by picking frames rather than blending them. Audio comes along when the file has one. The result is
 written as a normal take, pending review.
 
 There is also an **H3 Import Source** node for graph use, with the same

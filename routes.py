@@ -471,7 +471,12 @@ def _register():
 
     def _input_root():
         import folder_paths as fp
-        return os.path.realpath(fp.get_input_directory())
+        getter = getattr(fp, "get_input_directory", None)
+        if getter is None:
+            raise ProjectError(
+                "h3_suite: this ComfyUI does not expose an input folder, "
+                "so importing cannot find your videos.")
+        return os.path.realpath(getter())
 
     def _safe_source(rel):
         """A path inside ComfyUI's input folder, or nothing."""
@@ -487,7 +492,10 @@ def _register():
     @routes.get("/h3_suite/source/list")
     async def source_list(request):
         """Videos in ComfyUI's input folder, newest first."""
-        root = _input_root()
+        try:
+            root = _input_root()
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
         exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
         out = []
         for dirpath, _dirs, files in os.walk(root):
@@ -503,6 +511,82 @@ def _register():
                             "size": st.st_size, "mtime": st.st_mtime})
         out.sort(key=lambda e: e["mtime"], reverse=True)
         return web.json_response({"files": out[:400]})
+
+    @routes.post("/h3_suite/source/upload")
+    async def source_upload(request):
+        """Take a file from the browser into ComfyUI's input folder.
+
+        Written to a temp name in the destination folder and renamed
+        into place, so a half-received upload never appears in the
+        picker as a playable file.
+        """
+        import shutil
+        import tempfile
+
+        try:
+            root = _input_root()
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        dest_dir = os.path.join(root, "h3_imports")
+        try:
+            os.makedirs(dest_dir, exist_ok=True)
+        except OSError as exc:
+            return web.json_response({"error": str(exc)}, status=500)
+        exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+        try:
+            reader = await request.multipart()
+        except Exception as exc:
+            return web.json_response({"error": "not a file upload (%s)"
+                                              % exc}, status=400)
+        written = None
+        while True:
+            part = await reader.next()
+            if part is None:
+                break
+            if part.name != "file" or not part.filename:
+                continue
+            # the browser's filename is untrusted: keep the basename, and
+            # only an extension we are prepared to open
+            base = os.path.basename(part.filename).replace("\\", "_")
+            base = "".join(ch for ch in base
+                           if ch.isalnum() or ch in " ._-()[]").strip()
+            stem, ext = os.path.splitext(base)
+            if ext.lower() not in exts:
+                return web.json_response(
+                    {"error": "%s is not a video this can open (%s)"
+                              % (part.filename, ", ".join(exts))},
+                    status=400)
+            stem = stem or "import"
+            final = os.path.join(dest_dir, stem + ext)
+            n = 1
+            while os.path.exists(final):
+                final = os.path.join(dest_dir, "%s_%d%s" % (stem, n, ext))
+                n += 1
+            fd, tmp = tempfile.mkstemp(dir=dest_dir, suffix=".part")
+            size = 0
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    while True:
+                        chunk = await part.read_chunk(1 << 20)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        fh.write(chunk)
+                os.replace(tmp, final)
+            except Exception as exc:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                return web.json_response({"error": str(exc)}, status=500)
+            written = {"rel": os.path.relpath(final, root), "size": size}
+            break
+        if written is None:
+            return web.json_response({"error": "no file in the upload"},
+                                     status=400)
+        _LOG.info("h3_suite: uploaded %s (%.1f MB) for import",
+                  written["rel"], written["size"] / 1048576.0)
+        return web.json_response(written)
 
     @routes.get("/h3_suite/source/probe")
     async def source_probe(request):

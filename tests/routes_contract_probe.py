@@ -22,6 +22,7 @@ sys.path.insert(0, _PKG)
 _OUT = tempfile.mkdtemp()
 fp = types.ModuleType("folder_paths")
 fp.get_output_directory = lambda: _OUT
+fp.get_input_directory = lambda: _OUT
 sys.modules["folder_paths"] = fp
 
 REGISTRY = {}

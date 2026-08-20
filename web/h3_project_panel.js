@@ -142,6 +142,15 @@ table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
 .h3p-spark .bars{display:flex;align-items:flex-end;gap:3px;height:40px;}
 .h3p-spark .bars i{flex:1;background:#3b4657;border-radius:2px 2px 0 0;}
 .h3p-note{font-size:calc(11px * var(--h3p-fs, 1));color:#7d8697;line-height:1.5;margin:14px 0 0;}
+.h3p-drop{position:absolute;inset:0;z-index:30;display:none;
+  align-items:center;justify-content:center;border-radius:12px;
+  background:rgba(20,26,38,.86);border:2px dashed #5b8cff;
+  color:#dfe4ee;font-size:calc(14px * var(--h3p-fs, 1));font-weight:600;}
+.h3p-drop.on{display:flex;}
+.h3p-empty{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;min-height:220px;color:#8a93a3;
+  border:1px dashed #333c4c;border-radius:10px;margin:4px 0;
+  font-size:calc(12px * var(--h3p-fs, 1));}
 .h3p-impbar{display:flex;align-items:center;gap:8px;padding:8px 16px;
   border-bottom:1px solid #262b36;}
 .h3p-impbar select{flex:1;min-width:0;background:#141821;
@@ -834,6 +843,21 @@ class ImportModal {
     this.picker = el("select", {
       onchange: (e) => this.choose(e.target.value),
     });
+    this.fileInput = el("input", {
+      type: "file", accept: "video/*", style: "display:none",
+      onchange: (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) this.upload(f);
+        e.target.value = "";
+      },
+    });
+    this.dropZone = el("div", { class: "h3p-drop",
+                                text: "Drop a video to import" });
+    this.empty = el("div", { class: "h3p-empty" },
+      el("div", { text: "No videos yet." }),
+      el("div", { text: "Drop one anywhere in this window, or:" }),
+      el("button", { class: "h3p-btn primary", text: "Choose a video\u2026",
+                     onclick: () => this.fileInput.click() }));
     this.video = el("video", { class: "h3p-impvid", controls: false,
                                preload: "metadata" });
     this.video.addEventListener("timeupdate", () => this.drawHead());
@@ -854,6 +878,7 @@ class ImportModal {
                                     text: "Import as clip",
                                     onclick: () => this.doImport() });
     this.body = el("div", { class: "h3p-impwrap" },
+      this.empty, this.fileInput,
       this.video, this.strip, this.info2,
       el("div", { class: "h3p-inline" },
         el("span", { class: "h3p-takelabel", text: "length" }), this.lenSel,
@@ -876,10 +901,62 @@ class ImportModal {
         el("div", { class: "h3p-impbar" },
           el("span", { class: "h3p-takelabel", text: "file" }),
           this.picker,
+          el("button", { class: "h3p-btn", text: "Choose\u2026",
+                         title: "pick a video from your computer",
+                         onclick: () => this.fileInput.click() }),
           el("button", { class: "h3p-btn", text: "Refresh",
                          onclick: () => this.loadFiles() })),
-        this.body));
+        this.body,
+        this.dropZone));
     this._esc = (e) => { if (e.key === "Escape") this.close(); };
+
+    // drag events fire per child element, so a plain enter/leave pair
+    // flickers; count them instead
+    this._dragDepth = 0;
+    const modal = this.overlay.querySelector(".h3p-modal");
+    modal.addEventListener("dragenter", (e) => {
+      if (!this._hasFiles(e)) return;
+      e.preventDefault();
+      this._dragDepth += 1;
+      this.dropZone.classList.add("on");
+    });
+    modal.addEventListener("dragover", (e) => {
+      if (this._hasFiles(e)) e.preventDefault();
+    });
+    modal.addEventListener("dragleave", () => {
+      this._dragDepth = Math.max(0, this._dragDepth - 1);
+      if (!this._dragDepth) this.dropZone.classList.remove("on");
+    });
+    modal.addEventListener("drop", (e) => {
+      if (!this._hasFiles(e)) return;
+      e.preventDefault();
+      this._dragDepth = 0;
+      this.dropZone.classList.remove("on");
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) this.upload(f);
+    });
+  }
+
+  _hasFiles(e) {
+    const t = e.dataTransfer && e.dataTransfer.types;
+    return !!t && Array.prototype.indexOf.call(t, "Files") !== -1;
+  }
+
+  async upload(file) {
+    const mb = (file.size / 1048576).toFixed(0);
+    toast(`uploading ${file.name} (${mb} MB)\u2026`);
+    const fd = new FormData();
+    fd.append("file", file, file.name);
+    try {
+      const r = await api.fetchApi("/h3_suite/source/upload",
+                                   { method: "POST", body: fd });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      await this.loadFiles(d.rel);
+      toast(`${d.rel} ready`);
+    } catch (e) {
+      toast(e.message, true);
+    }
   }
 
   async open() {
@@ -899,24 +976,30 @@ class ImportModal {
     this.panel.refresh(true);
   }
 
-  async loadFiles() {
+  async loadFiles(prefer) {
     this.picker.innerHTML = "";
     let files = [];
     try {
       const r = await api.fetchApi("/h3_suite/source/list");
       files = (await r.json()).files || [];
     } catch (e) { toast(e.message, true); }
-    if (!files.length) {
-      this.picker.append(el("option", {
-        value: "", text: "no videos in ComfyUI's input folder" }));
-      this.info2.textContent =
-        "Put a video in ComfyUI's input folder, then Refresh.";
+    const has = files.length > 0;
+    this.empty.style.display = has ? "none" : "flex";
+    for (const nm of ["video", "strip", "info2"]) {
+      this[nm].style.display = has ? "" : "none";
+    }
+    this.picker.disabled = !has;
+    if (!has) {
+      this.picker.append(el("option", { value: "", text: "no videos yet" }));
       return;
     }
     for (const f of files) {
       this.picker.append(el("option", { value: f.rel, text: f.rel }));
     }
-    await this.choose(files[0].rel);
+    const pick = prefer && files.some((f) => f.rel === prefer)
+      ? prefer : files[0].rel;
+    this.picker.value = pick;
+    await this.choose(pick);
   }
 
   async choose(rel) {
