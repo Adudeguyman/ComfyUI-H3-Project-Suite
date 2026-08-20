@@ -101,8 +101,12 @@ def put_clip(root, basename, full_lumas, deliver, sr=8):
          "w").write(json.dumps(stub))
     open(os.path.join(root, basename + ".safetensors"), "w").write("x")
     meta = {"frames": deliver, "fps": 8, "sample_rate": sr}
+    workflow = {"nodes": [
+        {"type": "VAELoader", "widgets_values": ["h3_video_vae.safetensors"]},
+        {"type": "VAELoader", "widgets_values": ["h3_audio_vae.safetensors"]},
+    ]}
     open(os.path.join(root, basename + ".json"), "w").write(
-        json.dumps({"meta": meta}))
+        json.dumps({"meta": meta, "workflow": workflow}))
 
 
 def decode_master(path):
@@ -156,16 +160,63 @@ def main():
     else:
         raise AssertionError("missing latent must refuse")
 
-    # no VAEs registered: plain message, not a traceback
+    # nothing registered: the export loads the VAEs the take was
+    # rendered with, rather than demanding a generation first
     ex._VAES.clear()
+    loaded = {}
+
+    class FakeSD:
+        @staticmethod
+        def VAE(sd=None):
+            v = FakeVideoVAE() if sd == "video" else FakeAudioVAE()
+            v.latent_channels, v.latent_dim = (
+                (24, 3) if sd == "video" else (32, 2))
+            loaded[sd] = True
+            return v
+
+    fake_fp = types.ModuleType("folder_paths")
+    fake_fp.get_output_directory = lambda: _OUT
+    fake_fp.get_full_path = lambda kind, name: (
+        "/fake/" + name if "vae" in name else None)
+    sys.modules["folder_paths"] = fake_fp
+    cs = types.ModuleType("comfy.sd")
+    cs.VAE = FakeSD.VAE
+    cu = types.ModuleType("comfy.utils")
+    cu.load_torch_file = lambda path: (
+        "video" if "video" in path else "audio")
+    comfy = types.ModuleType("comfy")
+    comfy.sd, comfy.utils = cs, cu
+    sys.modules["comfy"] = comfy
+    sys.modules["comfy.sd"] = cs
+    sys.modules["comfy.utils"] = cu
+
+    out5 = os.path.join(root, "m5.mp4")
+    ex.export_from_latents(p, clips[:2], out5, level_match=False)
+    assert os.path.exists(out5), "export with no registered VAEs failed"
+    assert loaded.get("video") and loaded.get("audio"), loaded
+    print("4. nothing registered: loaded both VAEs from the take's "
+          "own workflow")
+
+    # classification is by the loaded object, never the filename
+    v = FakeVideoVAE(); v.latent_channels, v.latent_dim = 24, 3
+    a = FakeAudioVAE(); a.latent_channels, a.latent_dim = 32, 2
+    assert ex._classify(v) == "video" and ex._classify(a) == "audio"
+    junk = FakeVideoVAE(); junk.latent_channels, junk.latent_dim = 16, 3
+    assert ex._classify(junk) is None, "an unrelated VAE must not pass"
+    print("5. VAEs classified by shape: 24/3 video, 32/2 audio, "
+          "others refused")
+
+    # and a chain whose sidecars name no VAE says what to do
+    ex._VAES.clear()
+    open(os.path.join(root, "clip_001_take1.json"), "w").write(
+        json.dumps({"meta": {"frames": 6, "fps": 8}}))
     try:
-        ex.export_from_latents(p, clips[:1],
-                               os.path.join(root, "m4.mp4"))
+        ex.export_from_latents(p, clips[:1], os.path.join(root, "m6.mp4"))
     except RuntimeError as exc:
-        assert "no VAEs registered" in str(exc)
-        print("4. no VAEs this session: refused with the reason")
+        assert "no VAE loader" in str(exc), exc
+        print("6. sidecar names no VAE: told to wire them and queue once")
     else:
-        raise AssertionError("must refuse without VAEs")
+        raise AssertionError("must refuse when no VAE can be found")
 
     print("all checks passed")
 

@@ -141,7 +141,7 @@ Next to the export buttons is a **from latents** toggle. Off, the master is join
 
 What that buys: every frame in the master meets H.264 exactly once, with settings chosen at export rather than at save; and level matching happens in float *before* that encode, so a corrected join no longer costs a second compression generation. The per-clip videos become what they always were underneath — review copies.
 
-What it costs: a chain's worth of VAE decodes, so a minute rather than a second, and it needs the graph's VAEs — queue any clip once after a restart so H3 Context can register them. If a take's latent file is missing, the export names it and stops rather than quietly substituting the video.
+What it costs: a chain's worth of VAE decodes, so a minute rather than a second. Nothing needs wiring or queueing first — each take records the workflow that made it, so the export loads the same VAEs that rendered the clips, or borrows the ones already in memory if you have generated something this session. If a take's latent file is missing, the export names it and stops rather than quietly substituting the video.
 
 The setting is remembered in your browser.
 

@@ -11,9 +11,14 @@ H.264 exactly once, and level matching is applied in float before that
 encode, so corrected joins stop costing a second compression
 generation.
 
-The graph's VAEs are registered by H3 Context whenever a clip runs, and
-the export borrows them; after a restart, queue any clip once first. A
-missing latent is named and refused before a single frame is written -
+It borrows the running graph's VAEs when a clip has been queued this
+session, and otherwise loads the ones the takes were rendered with,
+named in each take's recorded workflow. Nothing to wire, and no
+requirement to generate something before exporting. Each candidate is
+classified by what it loads as rather than by its filename, so an
+unrelated VAE is refused instead of quietly decoding to garbage.
+
+A missing latent is named and refused before a single frame is written -
 a master that silently swapped one clip to its video would misrepresent
 itself.
 

@@ -44,6 +44,96 @@ def vaes_ready():
     return "video" in _VAES
 
 
+def _classify(vae):
+    """video or audio, from the loaded object rather than its filename.
+
+    ComfyUI gives the H3 pair different shapes: the video VAE is 24
+    latent channels over 3 dims, the audio VAE is 32 over 2 and carries
+    a sample rate. Reading those is exact, where a filename heuristic
+    would eventually pick the wrong decoder and produce garbage instead
+    of an error.
+    """
+    ch = int(getattr(vae, "latent_channels", 0) or 0)
+    dim = int(getattr(vae, "latent_dim", 0) or 0)
+    if ch == 24 and dim == 3:
+        return "video"
+    if ch == 32 and dim == 2:
+        return "audio"
+    return None
+
+
+def _vae_names_from_workflow(project, basename):
+    """Every VAE filename the take's own workflow loaded."""
+    side = os.path.join(project.clips_dir, basename + ".json")
+    try:
+        with open(side, encoding="utf-8") as fh:
+            wf = json.load(fh).get("workflow") or {}
+    except Exception:
+        return []
+    names = []
+    for node in (wf.get("nodes") or []):
+        if node.get("type") not in ("VAELoader", "VAELoaderNF4"):
+            continue
+        for v in (node.get("widgets_values") or []):
+            if isinstance(v, str) and v.strip():
+                names.append(v)
+    return names
+
+
+def load_vaes_for(project, clips):
+    """Load the VAEs a chain was rendered with, without a render.
+
+    Registration from H3 Context only happens when that node executes,
+    which would make exporting depend on having generated something this
+    session. The take's sidecar records the workflow that produced it,
+    so the filenames are already on disk; this loads them the same way
+    ComfyUI would and classifies each by what it turns out to be.
+    """
+    if "video" in _VAES:
+        return dict(_VAES)
+    import comfy.sd
+    import comfy.utils
+    import folder_paths
+
+    seen = []
+    for c in clips:
+        for n in _vae_names_from_workflow(project, c["basename"]):
+            if n not in seen:
+                seen.append(n)
+    if not seen:
+        raise RuntimeError(
+            "h3_suite: the takes' workflows name no VAE loader, so the "
+            "export cannot tell which decoders to use. Wire the video "
+            "and audio VAEs into H3 Context and queue one clip, then "
+            "export again.")
+
+    found = {}
+    problems = []
+    for name in seen:
+        if len(found) == 2:
+            break
+        try:
+            path = folder_paths.get_full_path("vae", name)
+            if not path:
+                problems.append("%s: not found in the vae folder" % name)
+                continue
+            vae = comfy.sd.VAE(sd=comfy.utils.load_torch_file(path))
+            kind = _classify(vae)
+            if kind and kind not in found:
+                found[kind] = vae
+                _LOG.info("h3_suite: export loaded the %s VAE from %s",
+                          kind, name)
+        except Exception as exc:
+            problems.append("%s: %s" % (name, exc))
+    if "video" not in found:
+        raise RuntimeError(
+            "h3_suite: could not load a video VAE for the export. Tried "
+            "%s.%s" % (", ".join(seen),
+                       (" Errors: " + "; ".join(problems)) if problems
+                       else ""))
+    return found
+
+
 def _require():
     import av
     import numpy as np
@@ -162,13 +252,12 @@ def export_from_latents(project, clips, master_path, level_match=True,
         from safetensors.torch import load_file as st_load
     except ImportError as exc:
         raise RuntimeError("h3_suite: safetensors unavailable (%s)" % exc)
-    if "video" not in _VAES:
-        raise RuntimeError(
-            "h3_suite: no VAEs registered this session. Queue any clip "
-            "once so H3 Context can register the graph's VAEs, or export "
-            "from the clip videos instead.")
-    vae = _VAES["video"]
-    audio_vae = _VAES.get("audio")
+    # the running graph's VAEs when a clip has been queued this session,
+    # otherwise loaded from the takes' own recorded workflow - exporting
+    # must not require having generated something first
+    ready = load_vaes_for(project, clips)
+    vae = ready["video"]
+    audio_vae = ready.get("audio")
 
     # every latent must exist BEFORE the first frame is written: a master
     # that silently swapped one clip to its MP4 would misrepresent itself
