@@ -142,6 +142,30 @@ table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
 .h3p-spark .bars{display:flex;align-items:flex-end;gap:3px;height:40px;}
 .h3p-spark .bars i{flex:1;background:#3b4657;border-radius:2px 2px 0 0;}
 .h3p-note{font-size:calc(11px * var(--h3p-fs, 1));color:#7d8697;line-height:1.5;margin:14px 0 0;}
+.h3p-impbar{display:flex;align-items:center;gap:8px;padding:8px 16px;
+  border-bottom:1px solid #262b36;}
+.h3p-impbar select{flex:1;min-width:0;background:#141821;
+  border:1px solid #333c4c;border-radius:7px;color:#dfe4ee;padding:5px 8px;
+  font-size:calc(12px * var(--h3p-fs, 1));}
+.h3p-impwrap{display:flex;flex-direction:column;gap:8px;padding:10px 16px;}
+.h3p-impvid{width:100%;max-height:44vh;background:#000;border-radius:8px;}
+.h3p-strip{position:relative;height:64px;background:#11151d;
+  border:1px solid #2a3140;border-radius:8px;overflow:hidden;
+  cursor:grab;user-select:none;}
+.h3p-strip.drag{cursor:grabbing;}
+.h3p-stripimgs{position:absolute;inset:0;display:flex;}
+.h3p-stripimgs canvas{height:100%;flex:1 1 0;min-width:0;object-fit:cover;}
+.h3p-cut{position:absolute;top:0;bottom:0;background:rgba(10,12,18,.72);}
+.h3p-keep{position:absolute;top:0;bottom:0;border:2px solid #5b8cff;
+  border-radius:4px;box-shadow:0 0 0 9999px rgba(0,0,0,0) inset;}
+.h3p-keep::after{content:"";position:absolute;inset:0;
+  background:rgba(91,140,255,.10);}
+.h3p-playhead{position:absolute;top:0;bottom:0;width:2px;
+  background:#ffd479;pointer-events:none;}
+.h3p-impinfo{display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  color:#8a93a3;font-size:calc(11px * var(--h3p-fs, 1));}
+.h3p-impinfo b{color:#dfe4ee;font-weight:600;}
+.h3p-impinfo .drop{color:#ff9d5c;}
 .h3p-scalewrap{position:relative;}
 .h3p-scalemenu{--h3p-fs:1;position:absolute;right:0;top:100%;margin-top:6px;
   z-index:20;display:none;width:300px;background:#1e222a;
@@ -790,6 +814,288 @@ class BranchModal extends ChainTimeline {
 /* review modal                                                        */
 /* ------------------------------------------------------------------ */
 
+
+/** Pick a window out of a source video, seeing exactly what is cut.
+ *
+ * H3 can only render certain lengths (5, 22, 39, 56 ... frames), so
+ * importing footage always means dropping some. The filmstrip shows the
+ * whole source with the kept span lit and the dropped ends dimmed; the
+ * span snaps to valid lengths as it is resized, so an invalid window
+ * cannot be chosen. Scrubbing plays the real file underneath.
+ */
+class ImportModal {
+  constructor(panel) {
+    this.panel = panel;
+    this.file = null;
+    this.info = null;
+    this.start = 0;
+    this.len = 0;
+
+    this.picker = el("select", {
+      onchange: (e) => this.choose(e.target.value),
+    });
+    this.video = el("video", { class: "h3p-impvid", controls: false,
+                               preload: "metadata" });
+    this.video.addEventListener("timeupdate", () => this.drawHead());
+    this.stripImgs = el("div", { class: "h3p-stripimgs" });
+    this.cutL = el("div", { class: "h3p-cut" });
+    this.cutR = el("div", { class: "h3p-cut" });
+    this.keepBox = el("div", { class: "h3p-keep" });
+    this.head = el("div", { class: "h3p-playhead" });
+    this.strip = el("div", { class: "h3p-strip" },
+                    this.stripImgs, this.cutL, this.cutR, this.keepBox,
+                    this.head);
+    this.strip.addEventListener("mousedown", (e) => this.grab(e));
+    this.info2 = el("div", { class: "h3p-impinfo" });
+    this.lenSel = el("select", {
+      onchange: (e) => { this.setLen(Number(e.target.value)); },
+    });
+    this.importBtn = el("button", { class: "h3p-btn primary",
+                                    text: "Import as clip",
+                                    onclick: () => this.doImport() });
+    this.body = el("div", { class: "h3p-impwrap" },
+      this.video, this.strip, this.info2,
+      el("div", { class: "h3p-inline" },
+        el("span", { class: "h3p-takelabel", text: "length" }), this.lenSel,
+        el("div", { class: "h3p-spacer" }),
+        el("button", { class: "h3p-btn", text: "Play window",
+                       onclick: () => this.playWindow() }),
+        this.importBtn));
+
+    this.overlay = el("div", {
+      class: "h3p-overlay",
+      onmousedown: (e) => { if (e.target === this.overlay) this.close(); },
+    },
+      el("div", { class: "h3p-modal" },
+        el("div", { class: "h3p-head" },
+          el("div", { class: "h3p-title", text: "Import footage" },
+             el("small", { text: "pick what to keep" })),
+          el("div", { class: "h3p-spacer" }),
+          el("button", { class: "h3p-x", text: "\u2715",
+                         onclick: () => this.close() })),
+        el("div", { class: "h3p-impbar" },
+          el("span", { class: "h3p-takelabel", text: "file" }),
+          this.picker,
+          el("button", { class: "h3p-btn", text: "Refresh",
+                         onclick: () => this.loadFiles() })),
+        this.body));
+    this._esc = (e) => { if (e.key === "Escape") this.close(); };
+  }
+
+  async open() {
+    document.body.append(this.overlay);
+    try {
+      sizeScaledBox(this.overlay.querySelector(".h3p-modal"), 1240, 820,
+                    loadScalePrefs());
+    } catch (e) { /* a corrupt pref must not block the import */ }
+    document.addEventListener("keydown", this._esc);
+    await this.loadFiles();
+  }
+
+  close() {
+    document.removeEventListener("keydown", this._esc);
+    try { this.video.pause(); } catch (e) { /* already gone */ }
+    this.overlay.remove();
+    this.panel.refresh(true);
+  }
+
+  async loadFiles() {
+    this.picker.innerHTML = "";
+    let files = [];
+    try {
+      const r = await api.fetchApi("/h3_suite/source/list");
+      files = (await r.json()).files || [];
+    } catch (e) { toast(e.message, true); }
+    if (!files.length) {
+      this.picker.append(el("option", {
+        value: "", text: "no videos in ComfyUI's input folder" }));
+      this.info2.textContent =
+        "Put a video in ComfyUI's input folder, then Refresh.";
+      return;
+    }
+    for (const f of files) {
+      this.picker.append(el("option", { value: f.rel, text: f.rel }));
+    }
+    await this.choose(files[0].rel);
+  }
+
+  async choose(rel) {
+    if (!rel) return;
+    this.file = rel;
+    this.info = null;
+    this.info2.textContent = "reading\u2026";
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/source/probe?rel=${encodeURIComponent(rel)}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      this.info = d;
+    } catch (e) {
+      this.info2.textContent = e.message;
+      return;
+    }
+    this.video.src =
+      `/h3_suite/source/file?rel=${encodeURIComponent(rel)}`;
+    const valid = this.info.valid_lengths || [];
+    this.lenSel.innerHTML = "";
+    for (const n of valid.slice().reverse()) {
+      this.lenSel.append(el("option", { value: String(n),
+        text: `${n} frames \u00b7 ${(n / 24).toFixed(2)}s` }));
+    }
+    // default: the longest window that fits, anchored at the END, since
+    // imported footage usually runs INTO the chain
+    this.len = valid.length ? valid[valid.length - 1] : 0;
+    this.start = Math.max(0, (this.info.resampled || 0) - this.len);
+    this.lenSel.value = String(this.len);
+    this.buildStrip();
+    this.render();
+  }
+
+  async buildStrip() {
+    this.stripImgs.innerHTML = "";
+    const n = 12;
+    const dur = this.info?.duration || 0;
+    if (!dur) return;
+    // thumbnails are grabbed from the same <video> the panel scrubs, so
+    // no extra decode path and no server-side thumbnailer
+    const v = document.createElement("video");
+    v.src = this.video.src;
+    v.muted = true;
+    const canvases = [];
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("canvas");
+      c.width = 160; c.height = 90;
+      this.stripImgs.append(c);
+      canvases.push(c);
+    }
+    await new Promise((res) => {
+      v.addEventListener("loadeddata", res, { once: true });
+      setTimeout(res, 4000);
+    });
+    for (let i = 0; i < n; i++) {
+      const t = (dur * (i + 0.5)) / n;
+      try {
+        await new Promise((res) => {
+          v.addEventListener("seeked", res, { once: true });
+          v.currentTime = t;
+          setTimeout(res, 1200);
+        });
+        const cx = canvases[i].getContext("2d");
+        cx.drawImage(v, 0, 0, canvases[i].width, canvases[i].height);
+      } catch (e) { /* a thumbnail that will not draw is not fatal */ }
+    }
+  }
+
+  setLen(n) {
+    const total = this.info?.resampled || 0;
+    this.len = Math.min(n, total);
+    this.start = Math.min(this.start, Math.max(0, total - this.len));
+    this.render();
+  }
+
+  grab(e) {
+    const total = this.info?.resampled || 0;
+    if (!total) return;
+    const rect = this.strip.getBoundingClientRect();
+    const at = (ev) => Math.round(
+      ((ev.clientX - rect.left) / rect.width) * total);
+    const startAt = at(e);
+    const from = this.start;
+    const inside = startAt >= this.start && startAt < this.start + this.len;
+    if (!inside) {
+      this.start = Math.max(0, Math.min(total - this.len,
+                                        startAt - Math.floor(this.len / 2)));
+      this.render();
+      this.seekTo(this.start);
+    }
+    this.strip.classList.add("drag");
+    const move = (ev) => {
+      const d = at(ev) - startAt;
+      this.start = Math.max(0, Math.min(total - this.len,
+                                        (inside ? from : this.start) + d));
+      this.render();
+    };
+    const up = () => {
+      this.strip.classList.remove("drag");
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      this.seekTo(this.start);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  seekTo(frame) {
+    try { this.video.currentTime = frame / 24; } catch (e) { /* seeking */ }
+  }
+
+  playWindow() {
+    if (!this.info) return;
+    this.seekTo(this.start);
+    this.video.play();
+    const stop = () => {
+      if (this.video.currentTime >= (this.start + this.len) / 24) {
+        this.video.pause();
+        this.video.removeEventListener("timeupdate", stop);
+      }
+    };
+    this.video.addEventListener("timeupdate", stop);
+  }
+
+  drawHead() {
+    const total = this.info?.resampled || 0;
+    if (!total) return;
+    const f = this.video.currentTime * 24;
+    this.head.style.left = `${(f / total) * 100}%`;
+  }
+
+  render() {
+    const total = this.info?.resampled || 0;
+    if (!total) return;
+    const pct = (n) => `${(n / total) * 100}%`;
+    this.cutL.style.left = "0";
+    this.cutL.style.width = pct(this.start);
+    this.cutR.style.left = pct(this.start + this.len);
+    this.cutR.style.width = pct(total - this.start - this.len);
+    this.keepBox.style.left = pct(this.start);
+    this.keepBox.style.width = pct(this.len);
+    const drop = total - this.len;
+    const i = this.info;
+    this.info2.innerHTML =
+      `<span>source <b>${i.frames}</b> frames at <b>${
+        (+i.fps).toFixed(2)}</b> fps` +
+      (Math.abs(i.fps - 24) > 0.01
+        ? ` \u2192 <b>${total}</b> at 24` : "") +
+      `</span><span>keeping <b>${this.start}\u2013${
+        this.start + this.len - 1}</b> (<b>${this.len}</b> frames, ` +
+      `${(this.len / 24).toFixed(2)}s)</span>` +
+      (drop ? `<span class="drop">dropping ${drop} frame${
+        drop === 1 ? "" : "s"} (${(drop / 24).toFixed(2)}s)</span>` : "") +
+      (i.has_audio ? "" : "<span>no audio track</span>");
+  }
+
+  async doImport() {
+    if (!this.info || !this.len) return;
+    this.importBtn.disabled = true;
+    toast("decoding and encoding the window\u2026");
+    try {
+      const out = await post("/h3_suite/source/import", {
+        name: this.panel.name(), rel: this.file,
+        start: this.start, frames: this.len,
+        width: this.info.width, height: this.info.height,
+        crop: "center", with_audio: !!this.info.has_audio,
+      });
+      const im = out.imported || {};
+      toast(`imported as ${im.basename} \u2014 review it, then approve`);
+      this.close();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      this.importBtn.disabled = false;
+    }
+  }
+}
+
 class ProjectModal extends ChainTimeline {
   constructor(node) {
     super();
@@ -940,6 +1246,10 @@ class ProjectModal extends ChainTimeline {
           el("div", { class: "h3p-spacer" }),
           this.autoWrap,
           this.scaleWrap,
+          el("button", { class: "h3p-btn", text: "Import\u2026",
+                         title: "bring in outside footage as a clip, " +
+                                "choosing what to keep",
+                         onclick: () => new ImportModal(this).open() }),
           el("button", { class: "h3p-btn", text: "Open folder",
                          title: "opens on the machine running ComfyUI",
                          onclick: () => this.openFolder() }),

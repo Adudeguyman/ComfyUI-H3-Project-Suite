@@ -469,6 +469,86 @@ def _register():
         out["level_matched"] = matched
         return out
 
+    def _input_root():
+        import folder_paths as fp
+        return os.path.realpath(fp.get_input_directory())
+
+    def _safe_source(rel):
+        """A path inside ComfyUI's input folder, or nothing."""
+        root = _input_root()
+        real = os.path.realpath(os.path.join(root, rel or ""))
+        if os.path.commonpath([real, root]) != root:
+            raise ProjectError("h3_suite: that file is outside ComfyUI's "
+                               "input folder.")
+        if not os.path.isfile(real):
+            raise ProjectError("h3_suite: no such file: %s" % rel)
+        return real
+
+    @routes.get("/h3_suite/source/list")
+    async def source_list(request):
+        """Videos in ComfyUI's input folder, newest first."""
+        root = _input_root()
+        exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+        out = []
+        for dirpath, _dirs, files in os.walk(root):
+            for f in files:
+                if not f.lower().endswith(exts):
+                    continue
+                full = os.path.join(dirpath, f)
+                try:
+                    st = os.stat(full)
+                except OSError:
+                    continue
+                out.append({"rel": os.path.relpath(full, root),
+                            "size": st.st_size, "mtime": st.st_mtime})
+        out.sort(key=lambda e: e["mtime"], reverse=True)
+        return web.json_response({"files": out[:400]})
+
+    @routes.get("/h3_suite/source/probe")
+    async def source_probe(request):
+        """Real frame count and rate, read from the container."""
+        try:
+            real = _safe_source(request.rel_url.query.get("rel"))
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        try:
+            from .import_source import probe_video
+            info = probe_video(real)
+        except Exception as exc:
+            return web.json_response({"error": str(exc)}, status=400)
+        return web.json_response(info)
+
+    @routes.get("/h3_suite/source/file")
+    async def source_file(request):
+        try:
+            real = _safe_source(request.rel_url.query.get("rel"))
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        return web.FileResponse(real)
+
+    @routes.post("/h3_suite/source/import")
+    @_json_post
+    def source_import(body):
+        """Decode the chosen window, encode it, write it as a clip."""
+        import folder_paths as fp
+        from .import_source import import_window
+        p = Project(fp.get_output_directory(), body.get("name"))
+        real = _safe_source(body.get("rel"))
+        try:
+            info = import_window(
+                p, real,
+                start=int(body.get("start") or 0),
+                frames=int(body.get("frames") or 0),
+                width=int(body.get("width") or 0),
+                height=int(body.get("height") or 0),
+                crop=body.get("crop") or "center",
+                with_audio=bool(body.get("with_audio", True)))
+        except RuntimeError as exc:
+            raise ProjectError(str(exc))
+        out = _state(p)
+        out["imported"] = info
+        return out
+
     @routes.get("/h3_suite/project/video")
     async def video(request):
         try:

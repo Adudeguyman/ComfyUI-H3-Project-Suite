@@ -19,9 +19,17 @@ what it dropped and from which end, and the imported clip lands in the
 project as clip 1 for review before anything continues from it.
 """
 
+import json
 import logging
+import os
 
 _LOG = logging.getLogger(__name__)
+
+
+def json_dumps(obj, indent=None):
+    return json.dumps(obj, separators=(",", ":")
+                      if indent is None else None,
+                      indent=indent)
 
 FPS = 24
 FRAME_PER_TOKEN = (1, 4, 4, 4, 4)
@@ -178,3 +186,206 @@ def conform_audio(waveform, sample_rate, vae_sample_rate, frames,
         notes.append("padded %d samples (%.3fs) of silence to reach the "
                      "video length" % (pad, pad / float(vae_sample_rate)))
     return waveform, "; ".join(notes)
+
+
+# ---------------------------------------------------------------------
+# Reading a file, and importing a chosen window from it.
+#
+# The panel picks the window against real frames, so these read the
+# container directly rather than trusting a node input. A file's
+# declared rate can be a fiction (variable frame rate, or a container
+# average), so the count is verified rather than derived.
+# ---------------------------------------------------------------------
+
+
+def probe_video(path):
+    """Frame count, rate and size, read from the file itself."""
+    import av
+    with av.open(path) as c:
+        if not c.streams.video:
+            raise RuntimeError("h3_suite: %s has no video stream."
+                               % path.rsplit("/", 1)[-1])
+        vs = c.streams.video[0]
+        fps = float(vs.average_rate or vs.guessed_rate or FPS)
+        width, height = int(vs.codec_context.width), \
+            int(vs.codec_context.height)
+        frames = int(vs.frames or 0)
+        duration = float(vs.duration * vs.time_base) if vs.duration else 0.0
+        has_audio = bool(c.streams.audio)
+    if frames <= 0:
+        # some containers do not record it; count without decoding pixels
+        with av.open(path) as c:
+            frames = sum(1 for _ in c.demux(video=0) if _.pts is not None)
+    resampled = len(cfr_index_map(frames, fps)) if frames else 0
+    return {
+        "frames": frames, "fps": fps, "width": width, "height": height,
+        "duration": duration or (frames / fps if fps else 0.0),
+        "has_audio": has_audio,
+        # what the panel scrubs against: positions on H3's 24 fps timeline
+        "resampled": resampled,
+        "valid_lengths": valid_lengths(resampled),
+    }
+
+
+def read_window(path, start, frames, source_fps=None):
+    """Decode exactly the 24 fps window the panel chose.
+
+    start and frames are indices on the RESAMPLED timeline, which is
+    what the filmstrip shows, so what is decoded here is precisely what
+    was previewed.
+    """
+    import av
+    import numpy as np
+
+    info = probe_video(path)
+    fps = float(source_fps or info["fps"])
+    idx = cfr_index_map(info["frames"], fps)
+    picked = idx[start:start + frames]
+    if not picked:
+        raise RuntimeError("h3_suite: that window contains no frames.")
+    wanted = sorted(set(picked))
+    grabbed = {}
+    with av.open(path) as c:
+        stream = c.streams.video[0]
+        stream.thread_type = "AUTO"
+        seen = 0
+        target = set(wanted)
+        last = wanted[-1]
+        for frame in c.decode(video=0):
+            if seen in target:
+                grabbed[seen] = frame.to_ndarray(format="rgb24")
+            seen += 1
+            if seen > last:
+                break
+    missing = [i for i in wanted if i not in grabbed]
+    if missing:
+        raise RuntimeError(
+            "h3_suite: could not read %d frame(s) from the source; the "
+            "file may be truncated." % len(missing))
+    arr = np.stack([grabbed[i] for i in picked]).astype("float32") / 255.0
+    return arr, info
+
+
+def read_audio(path, start, frames, source_fps=None, target_sr=32000):
+    """The waveform under the chosen window, at the VAE's rate."""
+    import av
+    import numpy as np
+
+    info = probe_video(path)
+    if not info["has_audio"]:
+        return None
+    fps = float(source_fps or info["fps"])
+    t0 = start / float(FPS)
+    t1 = (start + frames) / float(FPS)
+    chunks = []
+    with av.open(path) as c:
+        astream = c.streams.audio[0]
+        resampler = av.audio.resampler.AudioResampler(
+            format="fltp", layout="stereo", rate=target_sr)
+        for frame in c.decode(audio=0):
+            ts = float(frame.pts * astream.time_base) if frame.pts else 0.0
+            if ts > t1:
+                break
+            for out in resampler.resample(frame):
+                chunks.append((ts, out.to_ndarray()))
+    if not chunks:
+        return None
+    wave = np.concatenate([c[1] for c in chunks], axis=-1)
+    if wave.ndim == 1:
+        wave = wave[None, :]
+    a = int(max(0, round(t0 * target_sr)))
+    b = int(round(t1 * target_sr))
+    return wave[:, a:b]
+
+
+def import_window(project, path, start, frames, width, height,
+                  crop="center", with_audio=True):
+    """Decode a window, encode it, and write it into the project.
+
+    Everything the chain needs for a first clip: the AV latent, the
+    video that latent contains, and a sidecar recording what the import
+    did. The clip arrives PENDING, so the trim is reviewed in the panel
+    like any other take.
+    """
+    import numpy as np
+    import torch
+
+    from .export_latents import load_vaes_for
+    from .project import ProjectError
+
+    if frames <= 0 or (frames - LADDER_BASE) % LADDER_STEP != 0:
+        raise RuntimeError(
+            "h3_suite: %d frames is not a length H3 can render. Valid "
+            "lengths are 5, 22, 39, 56 and so on." % frames)
+
+    vaes = load_vaes_for(project, project.clips)
+    vae = vaes["video"]
+    audio_vae = vaes.get("audio")
+
+    arr, info = read_window(path, start, frames)
+    images = torch.from_numpy(arr)
+    if width and height:
+        from .nodes import _resize
+        images = _resize(images, int(width), int(height), crop)
+
+    parts = [vae.encode(images[..., :3])]
+    audio_dict = None
+    if with_audio and audio_vae is not None and info["has_audio"]:
+        sr = int(getattr(audio_vae, "audio_sample_rate", 32000))
+        wave = read_audio(path, start, frames, target_sr=sr)
+        if wave is not None:
+            w = torch.from_numpy(np.ascontiguousarray(wave))[None]
+            w, _note = conform_audio(w, sr, sr, frames,
+                                     lambda x, a, b: x)
+            audio_dict = {"waveform": w, "sample_rate": sr}
+            parts.append(audio_vae.encode(w))
+
+    latent = torch.stack(parts) if len(parts) > 1 else parts[0]
+
+    from .nodes import _st_save
+    from .project_nodes import _write_video, _now_iso
+
+    index, take, basename = project.next_save()
+    video_lat = parts[0]
+    audio_lat = parts[1] if len(parts) > 1 else None
+    meta = {
+        "width": int(images.shape[2]),
+        "height": int(images.shape[1]),
+        "frames": int(frames),
+        "fps": FPS,
+        "duration": round(frames / float(FPS), 4),
+        "latent_video": list(getattr(video_lat, "shape", []) or []),
+        "latent_audio": list(getattr(audio_lat, "shape", []) or [])
+        if audio_lat is not None else [],
+        "saved_at": _now_iso(),
+        # what makes this clip's provenance readable later: it was not
+        # rendered, and this is the exact window it came from
+        "imported_from": os.path.basename(path),
+        "imported_window": [int(start), int(start + frames)],
+        "source_fps": round(float(info["fps"]), 4),
+        "source_frames": int(info["frames"]),
+    }
+    if audio_dict is not None:
+        meta["sample_rate"] = int(audio_dict["sample_rate"])
+
+    latent_path = os.path.join(project.clips_dir,
+                               basename + ".safetensors")
+    _st_save({"video": video_lat,
+              "audio": audio_lat if audio_lat is not None else video_lat},
+             latent_path,
+             {"format": "h3_motion_context_av_v1",
+              "h3_project": project.name,
+              "h3_meta": json_dumps(meta)})
+    _write_video(os.path.join(project.clips_dir, basename + ".mp4"),
+                 images, audio_dict, FPS,
+                 {"comment": json_dumps({"project": project.name,
+                                         "clip": basename,
+                                         "meta": meta})})
+    with open(os.path.join(project.clips_dir, basename + ".json"),
+              "w", encoding="utf-8") as fh:
+        fh.write(json_dumps({"meta": meta, "workflow": None}, indent=2))
+    project.record_render(index, take, meta)
+    _LOG.info("h3_suite: imported %s frames %d-%d as %s",
+              os.path.basename(path), start, start + frames - 1, basename)
+    return {"basename": basename, "index": index, "take": take,
+            "frames": int(frames), "source_frames": int(info["frames"])}

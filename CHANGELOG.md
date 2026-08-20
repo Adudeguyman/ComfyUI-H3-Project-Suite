@@ -2,16 +2,22 @@
 
 ## Unreleased
 
-### H3 Import Source
+### Importing footage
 
-A new node that turns outside footage into a chain's first clip. Video
-is remapped to 24 fps by picking frames rather than blending them, and
-trimmed to the nearest length H3 can render; audio is conformed to the
-kept video, or refused when it is too far off to be the same take.
+**Import...** in the panel opens a picker over ComfyUI's input folder
+and a filmstrip of the chosen file, with the kept span lit and the
+dropped ends dimmed. The span is dragged, the video scrubs underneath,
+and the length picker offers only lengths H3 can render - so the trim
+is chosen by looking at it rather than described afterwards. It opens
+on the longest valid window anchored at the end, since imported footage
+usually runs into a chain.
 
-The trim is reported in words and the clip arrives in the project as
-clip 1, pending review, so what was dropped is something you watch
-before the chain continues from it.
+Anything not at 24 fps is remapped by picking frames rather than
+blending them. Audio comes along when the file has one. The result is
+written as a normal take, pending review.
+
+There is also an **H3 Import Source** node for graph use, with the same
+conforming and a written report.
 
 ### Export from latents
 
