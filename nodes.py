@@ -750,6 +750,117 @@ class H3Context:
         return out
 
 
+class H3ImportSource:
+    """Bring outside footage into a chain as its first clip.
+
+    Conforms video to H3's 24 fps and to a length it can actually
+    render, conforms the audio to match, encodes both, and hands back a
+    latent plus the exact frames that latent contains. Wire those to H3
+    Project Save and the result lands in the project as clip 1, pending
+    review - so the trim is something you WATCH before the chain
+    continues from it, not something you discover later.
+
+    The report output says what was dropped and from which end. Wire it
+    to any text preview node to read it without opening the project.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "images": ("IMAGE", {
+                    "tooltip": "the source footage, from any loader you "
+                               "already use"}),
+                "source_fps": ("FLOAT", {
+                    "default": 24.0, "min": 1.0, "max": 240.0,
+                    "step": 0.001,
+                    "tooltip": "the rate the footage was shot or rendered "
+                               "at. Wrong here means a stutter at every "
+                               "join, so take it from the loader rather "
+                               "than guessing."}),
+                "width": ("INT", {"default": 928, "min": 16, "max": 4096,
+                                  "step": 16}),
+                "height": ("INT", {"default": 928, "min": 16, "max": 4096,
+                                   "step": 16}),
+                "crop": (["disabled", "center"], {"default": "center"}),
+                "keep": (["tail", "head", "center"], {
+                    "default": "tail",
+                    "tooltip": "which end survives the trim. 'tail' keeps "
+                               "the end, which is what you want when the "
+                               "footage runs INTO the chain."}),
+                "vae": ("VAE", {"tooltip": "H3 video VAE"}),
+            },
+            "optional": {
+                "audio": ("AUDIO", {
+                    "tooltip": "optional. Conformed to the kept video's "
+                               "length; wildly mismatched audio is "
+                               "refused rather than stretched."}),
+                "audio_vae": ("VAE", {"tooltip": "H3 audio VAE, needed "
+                                                 "only when audio is "
+                                                 "wired"}),
+            },
+        }
+
+    RETURN_TYPES = ("LATENT", "IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("latent", "images", "audio", "report")
+    OUTPUT_TOOLTIPS = (
+        "the encoded clip, for H3 Project Save",
+        "exactly the frames that latent contains, for H3 Project Save so "
+        "the saved video shows what was kept",
+        "the conformed audio, for H3 Project Save",
+        "what conforming did, in words")
+    FUNCTION = "apply"
+    CATEGORY = "MiniMax H3"
+    DESCRIPTION = ("Conform outside footage to H3's frame rate and clip "
+                   "grid, and encode it as a chain's first clip.")
+
+    def apply(self, images, source_fps, width, height, crop, keep, vae,
+              audio=None, audio_vae=None):
+        import torch
+
+        from .import_source import (conform_audio, describe, plan)
+
+        p = plan(int(images.shape[0]), float(source_fps), align=keep)
+        idx = None
+        from .import_source import cfr_index_map
+        idx = cfr_index_map(int(images.shape[0]), float(source_fps))
+        picked = idx[p["start"]:p["end"]]
+        frames = images[torch.tensor(picked, dtype=torch.long,
+                                     device=images.device)]
+        frames = _resize(frames, int(width), int(height), crop)
+
+        report = describe(p)
+        latent = {"samples": None}
+        video_latent = vae.encode(frames[..., :3])
+        parts = [video_latent]
+
+        audio_out = None
+        if audio is not None:
+            if audio_vae is None:
+                raise ValueError(
+                    "h3_suite: audio is wired but audio_vae is not. Wire "
+                    "the H3 audio VAE, or unwire the audio.")
+            vae_sr = int(getattr(audio_vae, "audio_sample_rate", 32000))
+            wave = audio["waveform"]
+            if torchaudio is None and int(audio["sample_rate"]) != vae_sr:
+                raise RuntimeError(
+                    "h3_suite: the audio is %d Hz, the VAE wants %d Hz, "
+                    "and torchaudio is not available to resample."
+                    % (audio["sample_rate"], vae_sr))
+            wave, note = conform_audio(
+                wave, int(audio["sample_rate"]), vae_sr, p["keep"],
+                lambda w, a, b: torchaudio.functional.resample(w, a, b))
+            if note:
+                report += "\n" + note[0].upper() + note[1:] + "."
+            audio_out = {"waveform": wave, "sample_rate": vae_sr}
+            parts.append(audio_vae.encode(wave))
+
+        latent = {"samples": torch.stack(parts) if len(parts) > 1
+                  else video_latent}
+        _LOG.info("h3_suite: import - %s", report.replace("\n", " "))
+        return (latent, frames, audio_out, report)
+
+
 class H3ContextTrim:
     """Drop the pinned head off a decoded clip, picture and sound together.
 
@@ -1106,12 +1217,14 @@ class H3ContextLoadLatent:
 NODE_CLASS_MAPPINGS = {
     "H3Context": H3Context,
     "H3ContextTrim": H3ContextTrim,
+    "H3ImportSource": H3ImportSource,
     "H3ContextSaveLatent": H3ContextSaveLatent,
     "H3ContextLoadLatent": H3ContextLoadLatent,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "H3Context": "H3 Context",
     "H3ContextTrim": "H3 Context Trim",
+    "H3ImportSource": "H3 Import Source",
     "H3ContextSaveLatent": "H3 Context Save Latent",
     "H3ContextLoadLatent": "H3 Context Load Latent",
 }

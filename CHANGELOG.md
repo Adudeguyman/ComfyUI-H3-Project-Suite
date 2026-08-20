@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### H3 Import Source
+
+A new node that turns outside footage into a chain's first clip. Video
+is remapped to 24 fps by picking frames rather than blending them, and
+trimmed to the nearest length H3 can render; audio is conformed to the
+kept video, or refused when it is too far off to be the same take.
+
+The trim is reported in words and the clip arrives in the project as
+clip 1, pending review, so what was dropped is something you watch
+before the chain continues from it.
+
 ### Export from latents
 
 A **from latents** toggle beside the export buttons. The master is

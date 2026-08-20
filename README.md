@@ -135,6 +135,22 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
+## Starting from footage you already have
+
+**H3 Import Source** takes any video you can load — a live-action plate, a clip from another model, an exported master you want to continue — and turns it into the chain's first clip.
+
+Two things have to be true before H3 can continue from footage, and the node handles both. It runs at 24fps, so anything else is remapped by picking frames, never by blending — no invented pixels. And a clip's length has to sit on H3's grid (5, 22, 39, 56 … frames), so the footage is trimmed to the nearest one that fits.
+
+**You see what that costs before anything continues from it.** The node's `report` output says exactly what happened — *"1000 frames at 29.97 fps → 801 at 24 fps. Trimmed 14 frames (0.58s) from the end to reach 787, the nearest length H3 can render."* — and the clip lands in the project as clip 1, pending review, so you watch the actual trimmed video in the panel before approving it.
+
+`keep` decides which end survives: **tail** (the default) keeps the ending, which is what you want when the footage runs *into* your chain; **head** keeps the beginning; **center** trims both ends evenly.
+
+Audio is optional and conformed to the kept video's length. Audio that's wildly the wrong length is refused rather than stretched, because a stretch that drifts sync is worse than a clear error.
+
+Wire `latent`, `images` and `audio` to **H3 Project Save**, and the rest of the chain works exactly as it does for a rendered clip.
+
+---
+
 ## Exporting from latents
 
 Next to the export buttons is a **from latents** toggle. Off, the master is joined from the clip videos — instant, and byte-identical to them. On, the exporter decodes each approved take's saved latent fresh and encodes the master in one pass.
