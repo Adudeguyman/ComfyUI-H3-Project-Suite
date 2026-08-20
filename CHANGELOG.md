@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Export from latents
+
+A **from latents** toggle beside the export buttons. The master is
+assembled by decoding each approved take's saved latent and encoding
+once, instead of joining the clip videos: every delivered frame meets
+H.264 exactly once, and level matching is applied in float before that
+encode, so corrected joins stop costing a second compression
+generation.
+
+The graph's VAEs are registered by H3 Context whenever a clip runs, and
+the export borrows them; after a restart, queue any clip once first. A
+missing latent is named and refused before a single frame is written -
+a master that silently swapped one clip to its video would misrepresent
+itself.
+
 ### Panel scaling
 
 A **Scale** control in the panel's top bar, with independent window and

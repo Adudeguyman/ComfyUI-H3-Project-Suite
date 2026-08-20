@@ -529,6 +529,11 @@ class H3Context:
               context_frames=None, context_latent=None, audio_vae=None,
               context_audio=None, enabled=True, seed_head=False,
               head_hold=1.0):
+        try:
+            from .export_latents import register_vaes
+            register_vaes(vae, audio_vae)
+        except Exception:
+            pass
         context_length = int(context_length)
         if enabled is False:
             # inert passthrough: conditioning untouched, trim 0 makes the

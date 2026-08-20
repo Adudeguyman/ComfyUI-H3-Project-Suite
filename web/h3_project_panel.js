@@ -220,7 +220,8 @@ const SCALE_KEY = "h3suite.panelPrefs";
 const SCALE_MIN = 1.0;
 const SCALE_MAX = 3.0;          // window: oversized is merely awkward
 const TEXT_SCALE_MAX = 2.0;     // type: oversized genuinely breaks layouts
-const SCALE_DEFAULTS = { windowScale: 1.0, textScale: 1.0 };
+const SCALE_DEFAULTS = { windowScale: 1.0, textScale: 1.0,
+                         exportFromLatents: false };
 
 function clampScale(v, max = SCALE_MAX) {
   const n = Number(v);
@@ -858,7 +859,8 @@ class ProjectModal extends ChainTimeline {
                      title: "seamless concat including the clip awaiting " +
                             "review \u2014 judge the join without the " +
                             "player's boundary stutter",
-                     onclick: () => this.exportMaster(true) }));
+                     onclick: () => this.exportMaster(true) }),
+      this.latentExportWrap);
     this.exportNaming = el("div", { class: "h3p-inline",
                                     style: "display:none" },
       el("span", { class: "h3p-takelabel", text: "save as" }),
@@ -887,6 +889,20 @@ class ProjectModal extends ChainTimeline {
     this.scaleWrap = el("div", { class: "h3p-scalewrap" },
                         this.scaleBtn, this.scaleMenu);
     this.buildScaleMenu();
+    this.latentExportBox = el("input", {
+      type: "checkbox",
+      onchange: (e) => {
+        this.scalePrefs.exportFromLatents = !!e.target.checked;
+        saveScalePrefs(this.scalePrefs);
+      },
+    });
+    this.latentExportWrap = el("label", { class: "h3p-auto",
+      title: "assemble the master by decoding the saved latents instead " +
+             "of joining the clip videos. Every frame is encoded exactly " +
+             "once, and level matching happens before that encode. " +
+             "Slower, and needs a clip queued this session so the " +
+             "graph's VAEs are known." },
+      this.latentExportBox, el("span", { text: "from latents" }));
     this.autoBox = el("input", {
       type: "checkbox",
       onchange: (e) => this.toggleAuto(e.target.checked),
@@ -1335,16 +1351,21 @@ class ProjectModal extends ChainTimeline {
     const filename = this.exportInput.value.trim();
     if (!filename) return;
     this.closeExportNaming();
-    toast("concatenating\u2026");
+    const fromLatents = !!this.scalePrefs.exportFromLatents;
+    toast(fromLatents ? "decoding latents\u2026 (slower than a concat)"
+                      : "concatenating\u2026");
     try {
       const out = await post("/h3_suite/project/export", {
         name: this.name(), include_pending: this._exportPending,
-        filename,
+        filename, use_latents: fromLatents,
       });
       const lm = (out.level_matched || []).length;
-      toast(`${out.preview ? "preview" : "master"} written ` +
-            `(${out.clip_count} clips${lm ? `, ${lm} join` +
-            `${lm === 1 ? "" : "s"} level-matched` : ""}): ${out.master}`);
+      const what = out.preview ? "preview" : "master";
+      const name = out.master || out.exported;
+      const n = out.clip_count || out.clips || "";
+      toast(`${what} written${out.from_latents ? " from latents" : ""} ` +
+            `(${n} clips${lm ? `, ${lm} join` +
+            `${lm === 1 ? "" : "s"} level-matched` : ""}): ${name}`);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -1654,6 +1675,7 @@ class ProjectModal extends ChainTimeline {
   render() {
     const s = this.state;
     const auto = !!(s && s.auto_approve);
+    this.latentExportBox.checked = !!this.scalePrefs.exportFromLatents;
     this.autoBox.checked = auto;
     this.autoWrap.classList.toggle("on", auto);
     this.autoBar.style.display = auto ? "flex" : "none";

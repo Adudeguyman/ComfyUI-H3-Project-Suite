@@ -377,6 +377,25 @@ def _register():
             clips.append(p.pending())
         if not clips:
             raise ProjectError("h3_suite: nothing to export.")
+        if body.get("use_latents"):
+            from .export_latents import export_from_latents
+            default = _suggest_export(p, preview)[:-4]
+            fname = _safe_export_name(body.get("filename"), default)
+            master = os.path.join(p.root, fname)
+            real = os.path.realpath(master)
+            if os.path.dirname(real) != os.path.realpath(p.root):
+                raise ProjectError(
+                    "h3_suite: export filename must stay in the project "
+                    "folder.")
+            try:
+                info = export_from_latents(
+                    p, clips, master,
+                    level_match=bool(body.get("level_match", True)))
+            except RuntimeError as exc:
+                raise ProjectError(str(exc))
+            return {"exported": fname, "from_latents": True,
+                    "level_matched": info["level_matched"],
+                    "preview": bool(preview)}
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             raise ProjectError("h3_suite: ffmpeg not found on PATH; "

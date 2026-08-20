@@ -135,6 +135,18 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
+## Exporting from latents
+
+Next to the export buttons is a **from latents** toggle. Off, the master is joined from the clip videos — instant, and byte-identical to them. On, the exporter decodes each approved take's saved latent fresh and encodes the master in one pass.
+
+What that buys: every frame in the master meets H.264 exactly once, with settings chosen at export rather than at save; and level matching happens in float *before* that encode, so a corrected join no longer costs a second compression generation. The per-clip videos become what they always were underneath — review copies.
+
+What it costs: a chain's worth of VAE decodes, so a minute rather than a second, and it needs the graph's VAEs — queue any clip once after a restart so H3 Context can register them. If a take's latent file is missing, the export names it and stops rather than quietly substituting the video.
+
+The setting is remembered in your browser.
+
+---
+
 ## On a big monitor
 
 The panel has a **Scale** control in its top bar, with two separate sliders.
