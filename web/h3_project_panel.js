@@ -852,6 +852,20 @@ class ProjectModal extends ChainTimeline {
     };
     // one fixed row: buttons by default, the name field in their place
     // while naming. Same height either way, so nothing below it moves.
+    this.latentExportBox = el("input", {
+      type: "checkbox",
+      onchange: (e) => {
+        this.scalePrefs.exportFromLatents = !!e.target.checked;
+        saveScalePrefs(this.scalePrefs);
+      },
+    });
+    this.latentExportWrap = el("label", { class: "h3p-auto",
+      title: "assemble the master by decoding the saved latents instead " +
+             "of joining the clip videos. Every frame is encoded exactly " +
+             "once, and level matching happens before that encode. " +
+             "Slower, and needs a clip queued this session so the " +
+             "graph's VAEs are known." },
+      this.latentExportBox, el("span", { text: "from latents" }));
     this.exportBtns = el("div", { class: "h3p-inline" },
       el("button", { class: "h3p-btn", text: "Export master",
                      onclick: () => this.exportMaster(false) }),
@@ -889,20 +903,6 @@ class ProjectModal extends ChainTimeline {
     this.scaleWrap = el("div", { class: "h3p-scalewrap" },
                         this.scaleBtn, this.scaleMenu);
     this.buildScaleMenu();
-    this.latentExportBox = el("input", {
-      type: "checkbox",
-      onchange: (e) => {
-        this.scalePrefs.exportFromLatents = !!e.target.checked;
-        saveScalePrefs(this.scalePrefs);
-      },
-    });
-    this.latentExportWrap = el("label", { class: "h3p-auto",
-      title: "assemble the master by decoding the saved latents instead " +
-             "of joining the clip videos. Every frame is encoded exactly " +
-             "once, and level matching happens before that encode. " +
-             "Slower, and needs a clip queued this session so the " +
-             "graph's VAEs are known." },
-      this.latentExportBox, el("span", { text: "from latents" }));
     this.autoBox = el("input", {
       type: "checkbox",
       onchange: (e) => this.toggleAuto(e.target.checked),
