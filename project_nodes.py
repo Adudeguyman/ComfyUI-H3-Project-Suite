@@ -229,7 +229,10 @@ def _write_video(path, images, audio, fps, tags=None):
         vs = container.add_stream("libx264", rate=int(fps))
         vs.width, vs.height = width, height
         vs.pix_fmt = "yuv420p"
-        vs.options = {"crf": "17", "preset": "medium"}
+        # clips are review copies - the master is encoded separately,
+        # from latents when that is on. "fast" at the same CRF costs a
+        # little file size and roughly halves the wait after a render.
+        vs.options = {"crf": "17", "preset": "fast"}
 
         astream = None
         if audio is not None:
@@ -273,7 +276,7 @@ def _write_video(path, images, audio, fps, tags=None):
         container.close()
         _p("container closed")
         total = sum(d for _w, d in _phase)
-        if total > 2.0:
+        if total > 20.0:
             _LOG.warning("h3_suite: mp4 write took %.1fs (%s)", total,
                          ", ".join("%s %.1fs" % (w, d) for w, d in _phase))
 
@@ -426,15 +429,15 @@ class H3ProjectSave:
         _write_video(video_path, images, audio, fps, tags)
         _mark("video encoded")
         total = _time.perf_counter() - _t0
-        if total > 2.0:
-            _LOG.warning(
-                "h3_suite: saving %s took %.1fs (%s). A short clip should "
-                "be about a second; the first phase includes waiting for "
-                "work still queued on the GPU.", basename, total,
-                ", ".join("%s %.1fs" % (w, d) for w, d in _marks))
+        detail = ", ".join("%s %.1fs" % (w, d) for w, d in _marks)
+        if total > 20.0:
+            # long enough that something is probably wrong rather than
+            # just a long clip
+            _LOG.warning("h3_suite: saving %s took %.1fs (%s)", basename,
+                         total, detail)
         else:
-            _LOG.debug("h3_suite: saved %s in %.2fs (%s)", basename, total,
-                       ", ".join("%s %.2fs" % (w, d) for w, d in _marks))
+            _LOG.info("h3_suite: saved %s in %.1fs (%s)", basename, total,
+                      detail)
 
         p.record_render(index, take, meta)
         if getattr(p, "auto_approve", False):

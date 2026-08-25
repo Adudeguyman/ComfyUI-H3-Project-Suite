@@ -161,7 +161,9 @@ What that buys: every frame in the master meets H.264 exactly once, with setting
 
 What it costs: a chain's worth of VAE decodes, so a minute rather than a second. It finds the VAEs the same way importing does — from the loaders wired to the Project Hub, from a take's recorded workflow, or from whatever the graph last used. If a take's latent file is missing, the export names it and stops rather than quietly substituting the video.
 
-The setting is remembered in your browser.
+With it on, the export dialog also offers a **quality** for the master: High (CRF 16) by default, Archive (CRF 14, slower) when it's the finished thing, or Quick (CRF 18) for a look. The review clips are encoded separately and aren't affected — they're deliberately cheaper now, since the master no longer comes from them.
+
+Both settings are remembered in your browser.
 
 ---
 

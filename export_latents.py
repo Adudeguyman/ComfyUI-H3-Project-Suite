@@ -248,7 +248,7 @@ def _clip_meta(project, basename):
 
 
 def export_from_latents(project, clips, master_path, level_match=True,
-                        crf=17, vae_names=None):
+                        crf=16, preset="medium", vae_names=None):
     """Decode approved takes one at a time into a single encode."""
     av, np = _require()
     try:
@@ -302,7 +302,9 @@ def export_from_latents(project, clips, master_path, level_match=True,
                 vs.width = int(frames.shape[2])
                 vs.height = int(frames.shape[1])
                 vs.pix_fmt = "yuv420p"
-                vs.options = {"crf": str(crf)}
+                # the master is the deliverable, so it gets its own
+                # settings rather than inheriting the review clips'
+                vs.options = {"crf": str(int(crf)), "preset": str(preset)}
 
             plan = None
             if level_match and prev_tail is not None:

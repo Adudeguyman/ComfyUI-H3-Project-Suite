@@ -229,6 +229,40 @@ def main():
     assert os.path.exists(out7), "explicit VAE names should be enough"
     print("7. explicit names: exported with no sidecar workflow at all")
 
+    # The master's encode settings are the caller's, not the clips'.
+    # Checked by encoding the same footage twice and requiring the files
+    # to differ: that proves the setting reaches the encoder, where
+    # inspecting PyAV's stream object only proves the probe can read it
+    # back.
+    # flat 4x4 frames compress to the same handful of bytes at any
+    # setting, so this check needs footage where quality has something to
+    # do: detailed, moving, and big enough for CRF to bite
+    class NoisyVAE:
+        def decode(self, lat):
+            rng = np.random.default_rng(7)
+            n = int(lat.a.reshape(-1).shape[0])
+            return T(rng.random((1, n, 96, 96, 3), dtype=np.float32))
+
+    ex._VAES.clear()
+    ex.register_vaes(NoisyVAE(), FakeAudioVAE())
+
+    def sized(crf, preset, name):
+        out = os.path.join(root, name)
+        # no vae_names here: explicit names would take priority and load
+        # the flat-frame fake instead of the noisy one registered above
+        ex.export_from_latents(p, clips[:2], out, level_match=False,
+                               crf=crf, preset=preset)
+        return os.path.getsize(out)
+
+
+    hi = sized(10, "medium", "m_hi.mp4")
+    lo = sized(38, "medium", "m_lo.mp4")
+    assert hi > lo * 1.5, (
+        "crf 10 produced %d bytes and crf 38 produced %d - too close for "
+        "the quality setting to be reaching the encoder" % (hi, lo))
+    print("8. master quality honoured: crf 10 -> %d bytes, crf 38 -> %d"
+          % (hi, lo))
+
     print("all checks passed")
 
 

@@ -254,7 +254,8 @@ const SCALE_MIN = 1.0;
 const SCALE_MAX = 3.0;          // window: oversized is merely awkward
 const TEXT_SCALE_MAX = 2.0;     // type: oversized genuinely breaks layouts
 const SCALE_DEFAULTS = { windowScale: 1.0, textScale: 1.0,
-                         exportFromLatents: false };
+                         exportFromLatents: false,
+                         masterQuality: "16:medium" };
 
 function clampScale(v, max = SCALE_MAX) {
   const n = Number(v);
@@ -1311,10 +1312,30 @@ class ProjectModal extends ChainTimeline {
                             "player's boundary stutter",
                      onclick: () => this.exportMaster(true) }),
       this.latentExportWrap);
+    this.qualitySel = el("select", {
+      title: "how the master itself is encoded. The review clips are " +
+             "unaffected.",
+      onchange: (e) => {
+        this.scalePrefs.masterQuality = e.target.value;
+        saveScalePrefs(this.scalePrefs);
+      },
+    });
+    for (const [v, label] of [
+      ["16:medium", "High \u00b7 CRF 16 (default)"],
+      ["14:slow", "Archive \u00b7 CRF 14, slow"],
+      ["18:fast", "Quick \u00b7 CRF 18, fast"],
+    ]) {
+      this.qualitySel.append(el("option", { value: v, text: label }));
+    }
+    this.qualityWrap = el("span", { class: "h3p-inline",
+                                    style: "display:none" },
+      el("span", { class: "h3p-takelabel", text: "quality" }),
+      this.qualitySel);
     this.exportNaming = el("div", { class: "h3p-inline",
                                     style: "display:none" },
       el("span", { class: "h3p-takelabel", text: "save as" }),
       this.exportInput,
+      this.qualityWrap,
       el("button", { class: "h3p-btn ok", text: "Write",
                      onclick: () => this.doExport() }),
       el("button", { class: "h3p-btn", text: "Cancel",
@@ -1778,6 +1799,12 @@ class ProjectModal extends ChainTimeline {
     }
     this.exportBtns.style.display = "none";
     this.exportNaming.style.display = "flex";
+    const latent = !!this.scalePrefs.exportFromLatents;
+    this.qualityWrap.style.display = latent ? "inline-flex" : "none";
+    if (latent) {
+      this.qualitySel.value =
+        this.scalePrefs.masterQuality || "16:medium";
+    }
     this.exportInput.focus();
     this.exportInput.select();
   }
@@ -1792,6 +1819,7 @@ class ProjectModal extends ChainTimeline {
     if (!filename) return;
     this.closeExportNaming();
     const fromLatents = !!this.scalePrefs.exportFromLatents;
+    const q = (this.scalePrefs.masterQuality || "16:medium").split(":");
     toast(fromLatents ? "decoding latents\u2026 (slower than a concat)"
                       : "concatenating\u2026");
     try {
@@ -1799,6 +1827,8 @@ class ProjectModal extends ChainTimeline {
         name: this.name(), include_pending: this._exportPending,
         filename, use_latents: fromLatents,
         vae_names: fromLatents ? wiredVaeNames(this.node) : undefined,
+        crf: fromLatents ? Number(q[0]) : undefined,
+        preset: fromLatents ? q[1] : undefined,
       });
       const lm = (out.level_matched || []).length;
       const what = out.preview ? "preview" : "master";

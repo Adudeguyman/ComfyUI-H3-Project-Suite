@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Master quality, and cheaper review clips
+
+Exporting from latents now asks how to encode the master - High (CRF
+16), Archive (CRF 14, slow) or Quick (CRF 18) - because that file is the
+deliverable and was previously inheriting a default meant for review
+copies.
+
+The per-clip videos moved to the "fast" x264 preset at the same CRF,
+roughly halving the wait after each render for a little file size. They
+are review copies; when the master is built from latents nothing in the
+delivered video passes through them at all.
+
 ### Saving long clips no longer crawls
 
 The mp4 writer converted every frame in one batch - clip(), then times

@@ -391,6 +391,8 @@ def _register():
                 info = export_from_latents(
                     p, clips, master,
                     level_match=bool(body.get("level_match", True)),
+                    crf=int(body.get("crf") or 16),
+                    preset=str(body.get("preset") or "medium"),
                     vae_names=body.get("vae_names") or None)
             except RuntimeError as exc:
                 raise ProjectError(str(exc))
