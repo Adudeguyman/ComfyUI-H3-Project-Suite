@@ -188,11 +188,23 @@ def _write_video(path, images, audio, fps, tags=None):
         _phase.append((what, now - _last[0]))
         _last[0] = now
 
-    arr = images.cpu().numpy() if hasattr(images, "cpu") else np.asarray(
-        images)
-    arr = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
-    n, height, width = arr.shape[0], arr.shape[1], arr.shape[2]
-    _p("frames to uint8")
+    # Frames are converted ONE AT A TIME. Doing the whole clip at once -
+    # clip(), then *255, then round(), then astype - makes four full-size
+    # temporaries: about 13 GB for a 13 second 928x928 clip against 3 GB
+    # of actual frames. That fits for a short clip and starts swapping
+    # for a longer one, which looks like a mysteriously slow encode with
+    # an idle CPU rather than like running out of memory.
+    n = int(images.shape[0])
+    height, width = int(images.shape[1]), int(images.shape[2])
+
+    def _frame(i):
+        f = images[i]
+        f = f.cpu().numpy() if hasattr(f, "cpu") else np.asarray(f)
+        # +0.5 then truncate is round(), without round()'s extra array
+        return np.ascontiguousarray(
+            np.clip(f, 0.0, 1.0) * 255.0 + 0.5, dtype=np.float32
+        ).astype(np.uint8)
+    _p("frame setup")
     _LOG.info("h3_suite: encoding %d frames %dx%d%s", n, width, height,
               (", audio %s @%dHz" % (
                   tuple(getattr(audio["waveform"], "shape", ())),
@@ -234,7 +246,7 @@ def _write_video(path, images, audio, fps, tags=None):
 
         _p("streams opened")
         for i in range(n):
-            frame = av.VideoFrame.from_ndarray(arr[i], format="rgb24")
+            frame = av.VideoFrame.from_ndarray(_frame(i), format="rgb24")
             for pkt in vs.encode(frame):
                 container.mux(pkt)
         for pkt in vs.encode():

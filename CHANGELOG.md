@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Saving long clips no longer crawls
+
+The mp4 writer converted every frame in one batch - clip(), then times
+255, then round(), then astype - which makes four full-size temporaries.
+About 13 GB for a thirteen-second 928x928 clip against 3 GB of actual
+frames. Short clips fit and saved in a second; longer ones pushed the
+machine into swap, and that presents as a ten-minute encode with an idle
+CPU rather than as an out-of-memory error, so the symptom points away
+from the cause.
+
+Frames are now converted one at a time, so peak memory is a frame rather
+than a clip. Project Save and the mp4 writer also log their phase
+timings when a save takes more than two seconds.
+
 ### Importing footage
 
 **Import...** in the panel opens a picker over ComfyUI's input folder
