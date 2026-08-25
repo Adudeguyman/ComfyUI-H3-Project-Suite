@@ -179,10 +179,25 @@ def _write_video(path, images, audio, fps, tags=None):
             "video. `pip install av` into the ComfyUI environment.")
     import numpy as np
 
+    import time as _t
+    _phase = []
+    _last = [_t.perf_counter()]
+
+    def _p(what):
+        now = _t.perf_counter()
+        _phase.append((what, now - _last[0]))
+        _last[0] = now
+
     arr = images.cpu().numpy() if hasattr(images, "cpu") else np.asarray(
         images)
     arr = (np.clip(arr, 0.0, 1.0) * 255.0).round().astype(np.uint8)
     n, height, width = arr.shape[0], arr.shape[1], arr.shape[2]
+    _p("frames to uint8")
+    _LOG.info("h3_suite: encoding %d frames %dx%d%s", n, width, height,
+              (", audio %s @%dHz" % (
+                  tuple(getattr(audio["waveform"], "shape", ())),
+                  int(audio["sample_rate"]))) if audio is not None else
+              ", no audio")
 
     # use_metadata_tags is REQUIRED: without it the mov/mp4 muxer writes
     # only its fixed standard tags (title, comment, ...) and SILENTLY
@@ -217,12 +232,14 @@ def _write_video(path, images, audio, fps, tags=None):
             astream = container.add_stream("aac", rate=sr)
             astream.layout = layout
 
+        _p("streams opened")
         for i in range(n):
             frame = av.VideoFrame.from_ndarray(arr[i], format="rgb24")
             for pkt in vs.encode(frame):
                 container.mux(pkt)
         for pkt in vs.encode():
             container.mux(pkt)
+        _p("video frames")
 
         if astream is not None:
             wav32 = np.ascontiguousarray(wav.astype(np.float32))
@@ -239,8 +256,14 @@ def _write_video(path, images, audio, fps, tags=None):
                     container.mux(pkt)
             for pkt in astream.encode():
                 container.mux(pkt)
+            _p("audio samples")
     finally:
         container.close()
+        _p("container closed")
+        total = sum(d for _w, d in _phase)
+        if total > 2.0:
+            _LOG.warning("h3_suite: mp4 write took %.1fs (%s)", total,
+                         ", ".join("%s %.1fs" % (w, d) for w, d in _phase))
 
 
 class H3ProjectSave:

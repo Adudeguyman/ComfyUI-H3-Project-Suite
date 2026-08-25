@@ -46,7 +46,10 @@ def main():
     # the probe needs no ComfyUI at all
     start = src.index("def _write_video(")
     end = src.index("class H3ProjectSave")
-    body = "import av\nimport os\n" + src[start:end]
+    # the writer logs its phase timings, so give the lifted copy the
+    # same logger the module has rather than a bare namespace
+    body = ("import av\nimport os\nimport logging\n"
+            "_LOG = logging.getLogger(\"h3_suite\")\n" + src[start:end])
     ns = {}
     exec(compile(body, "project_nodes.py", "exec"), ns)
     write_video = ns["_write_video"]
