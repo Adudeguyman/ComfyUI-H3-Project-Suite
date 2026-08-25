@@ -295,6 +295,20 @@ class H3ProjectSave:
         # into the wrong slot silently -- record_render still validates.
         index, take, basename = p.next_save()
 
+        # Timed in phases. Saving a short clip is a second's work, so if
+        # this node ever feels slow the question is WHICH phase - and the
+        # first one includes waiting for the GPU to finish everything
+        # queued upstream, which is easy to mistake for slow saving.
+        import time as _time
+        _t0 = _time.perf_counter()
+        _marks = []
+
+        def _mark(what):
+            now = _time.perf_counter()
+            _marks.append((what, now - _mark.last))
+            _mark.last = now
+        _mark.last = _t0
+
         parts = _streams_from_latent(latent)
         if len(parts) < 2:
             raise ValueError(
@@ -302,6 +316,7 @@ class H3ProjectSave:
                 "output of an H3 AV graph.")
         video_lat = parts[0].cpu().contiguous()
         audio_lat = parts[1].cpu().contiguous()
+        _mark("latent to cpu")
 
         os.makedirs(p.clips_dir, exist_ok=True)
         video_path = os.path.join(p.clips_dir, basename + ".mp4")
@@ -336,6 +351,7 @@ class H3ProjectSave:
                    "h3_meta": json.dumps(meta, separators=(",", ":"))}
         _st_save({"video": video_lat, "audio": audio_lat}, latent_path,
                  metadata=st_meta)
+        _mark("latent written")
 
         # sidecar: the authoritative record, plain JSON next to the pair
         sidecar = {
@@ -347,6 +363,7 @@ class H3ProjectSave:
         }
         side_path = os.path.join(p.clips_dir, basename + ".json")
         _atomic_json(side_path, sidecar)
+        _mark("sidecar written")
 
         tags = {
             "title": "%s %s" % (p.name, basename),
@@ -372,6 +389,17 @@ class H3ProjectSave:
             _LOG.info("h3_suite: embedding %s in %s.mp4",
                       ", ".join(embedded), basename)
         _write_video(video_path, images, audio, fps, tags)
+        _mark("video encoded")
+        total = _time.perf_counter() - _t0
+        if total > 2.0:
+            _LOG.warning(
+                "h3_suite: saving %s took %.1fs (%s). A short clip should "
+                "be about a second; the first phase includes waiting for "
+                "work still queued on the GPU.", basename, total,
+                ", ".join("%s %.1fs" % (w, d) for w, d in _marks))
+        else:
+            _LOG.debug("h3_suite: saved %s in %.2fs (%s)", basename, total,
+                       ", ".join("%s %.2fs" % (w, d) for w, d in _marks))
 
         p.record_render(index, take, meta)
         if getattr(p, "auto_approve", False):
