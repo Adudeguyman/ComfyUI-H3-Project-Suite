@@ -19,6 +19,7 @@ import types
 import numpy as np
 
 _PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_THIS = os.path.abspath(__file__)
 sys.path.insert(0, _PKG)
 
 _OUT = tempfile.mkdtemp()
@@ -94,13 +95,13 @@ class FakeProject:
         self.clips_dir = root
 
 
-def put_clip(root, basename, full_lumas, deliver, sr=8):
+def put_clip(root, basename, full_lumas, deliver, sr=8, fps=8):
     stub = {"video": [float(x) for x in full_lumas],
             "audio": [float(i) for i in range(len(full_lumas) * 2)]}
     open(os.path.join(root, basename + ".safetensors.json.stub"),
          "w").write(json.dumps(stub))
     open(os.path.join(root, basename + ".safetensors"), "w").write("x")
-    meta = {"frames": deliver, "fps": 8, "sample_rate": sr}
+    meta = {"frames": deliver, "fps": fps, "sample_rate": sr}
     workflow = {"nodes": [
         {"type": "VAELoader", "widgets_values": ["h3_video_vae.safetensors"]},
         {"type": "VAELoader", "widgets_values": ["h3_audio_vae.safetensors"]},
@@ -262,6 +263,73 @@ def main():
         "the quality setting to be reaching the encoder" % (hi, lo))
     print("8. master quality honoured: crf 10 -> %d bytes, crf 38 -> %d"
           % (hi, lo))
+
+    # Peak MEMORY, not peak single allocation: an extra copy of a clip
+    # is exactly one clip in size, so watching for a bigger array cannot
+    # tell a copy from the decode. Measured in a subprocess with a clip
+    # large enough for the difference to show, since ru_maxrss is a high
+    # water mark that never comes back down.
+    import subprocess
+    import textwrap
+
+    script = textwrap.dedent("""
+        import json, os, resource, sys, tempfile, types
+        import numpy as np
+        sys.path.insert(0, %r)
+        _src = open(%r).read().split("def main(")[0]
+        # the prelude resolves paths from __file__, which exec() does not
+        # provide - hand it the same values this process computed
+        _src = _src.replace(
+            "os.path.dirname(os.path.dirname(os.path.abspath(__file__)))",
+            repr(sys.path[0]))
+        _src = _src.replace("os.path.abspath(__file__)", repr("probe"))
+        exec(_src)
+        root = tempfile.mkdtemp()
+        p = FakeProject(root)
+
+        FRAMES, SIDE = 240, 256
+
+        class BigVAE:
+            def decode(self, lat):
+                n = int(lat.a.reshape(-1).shape[0])
+                rng = np.random.default_rng(3)
+                return T(rng.random((1, n, SIDE, SIDE, 3),
+                                    dtype=np.float32))
+
+        # no audio VAE: this measures the video path, and an
+        # 8 Hz fake waveform trips PyAV's packet timing
+        ex.register_vaes(BigVAE(), None)
+        put_clip(root, "clip_001_take1", [0.3] * FRAMES, FRAMES,
+                 fps=24)
+        put_clip(root, "clip_002_take1", [0.3] * FRAMES, FRAMES,
+                 fps=24)
+        clips = [{"index": 1, "basename": "clip_001_take1"},
+                 {"index": 2, "basename": "clip_002_take1"}]
+        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        ex.export_from_latents(p, clips, os.path.join(root, "big.mp4"),
+                               level_match=True)
+        after = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        clip_mb = FRAMES * SIDE * SIDE * 3 * 4 / 1e6
+        print(json.dumps({"peak_mb": after / 1024.0,
+                          "clip_mb": clip_mb}))
+    """) % (_PKG, _THIS)
+
+    r = subprocess.run([sys.executable, "-c", script],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print("   (memory measurement skipped: %s)"
+              % (r.stderr.strip().splitlines() or ["?"])[-1])
+    else:
+        import json as _json
+        d = _json.loads(r.stdout.strip().splitlines()[-1])
+        # one decoded clip is unavoidable; interpreter and numpy add a
+        # fixed overhead, so the bar is two clips rather than one
+        assert d["peak_mb"] < d["clip_mb"] * 2.2, (
+            "peak %.0f MB against a %.0f MB clip - the export is holding "
+            "more than the decode plus a frame"
+            % (d["peak_mb"], d["clip_mb"]))
+        print("9. export peak %.0f MB for a %.0f MB clip: the decode plus "
+              "a frame" % (d["peak_mb"], d["clip_mb"]))
 
     print("all checks passed")
 

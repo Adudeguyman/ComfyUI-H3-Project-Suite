@@ -176,34 +176,47 @@ def _waveform_from_decode(out):
     return t
 
 
-def _plan_from_arrays(prev_tail, next_head, np):
-    """level_match.measure(), on float frames instead of files.
+def _frame_stats(frames, count, scale, np):
+    """Per-frame mean luma and mean rgb, without a scaled copy.
 
-    prev_tail / next_head are [N, H, W, 3] in 0..255 float. Returns the
-    same plan dict shape measure() produces, or None when the join needs
-    nothing, so the thresholds stay in one place conceptually.
+    Level matching only ever needed a handful of numbers per frame. The
+    first version scaled whole slices to get them, which for a long clip
+    is gigabytes of temporaries to compute a few hundred floats.
     """
+    lumas, rgbs = [], []
+    for i in range(min(count, len(frames))):
+        f = frames[i]
+        lumas.append(float(f.mean()) * scale)
+        rgbs.append(np.asarray(f.reshape(-1, 3).mean(axis=0),
+                               dtype=np.float64) * scale)
+    return lumas, rgbs
+
+
+def _plan_from_stats(prev_luma, prev_rgb, head_lumas, head_rgbs, np):
+    """level_match.measure(), from statistics instead of pixels."""
     from .level_match import MAX_GAIN_DEV, MIN_STEP
 
-    a_luma = float(np.mean(prev_tail))
-    b_luma = float(np.mean(next_head[:len(prev_tail)]))
-    step = b_luma - a_luma
+    if not head_lumas:
+        return None
+    n = min(len(prev_rgb) if hasattr(prev_rgb, "__len__") else 3,
+            len(head_lumas))
+    b_luma = float(np.mean(head_lumas[:max(1, min(3, len(head_lumas)))]))
+    step = b_luma - prev_luma
     if abs(step) < MIN_STEP or b_luma <= 0.01:
         return None
-    gain = a_luma / b_luma
+    gain = prev_luma / b_luma
     if abs(gain - 1.0) > MAX_GAIN_DEV:
         _LOG.warning("h3_suite: join step %+.1f is too large to level "
                      "match; leaving it alone", step)
         return None
-    a_rgb = np.mean(prev_tail.reshape(-1, 3), axis=0)
-    b_rgb = np.mean(next_head[:len(prev_tail)].reshape(-1, 3), axis=0)
-    rgb_gain = np.where(b_rgb > 0.01, a_rgb / np.maximum(b_rgb, 1e-6), 1.0)
+    b_rgb = np.mean(np.stack(head_rgbs[:max(1, min(3, len(head_rgbs)))]),
+                    axis=0)
+    rgb_gain = np.where(b_rgb > 0.01,
+                        np.asarray(prev_rgb) / np.maximum(b_rgb, 1e-6), 1.0)
     rgb_gain = 1.0 + (rgb_gain - 1.0) * 0.5 + (gain - 1.0) * 0.5
 
-    # decay fit, same maths as level_match._fit_decay on the head lumas
-    vals = np.array([float(np.mean(f)) for f in next_head],
-                    dtype=np.float64)
-    excess = vals - a_luma
+    vals = np.asarray(head_lumas, dtype=np.float64)
+    excess = vals - prev_luma
     tau = None
     if len(excess) >= 8 and excess[0] > 0.5:
         usable = []
@@ -218,24 +231,22 @@ def _plan_from_arrays(prev_tail, next_head, np):
             slope, _icept = np.polyfit(idx, logv, 1)
             if slope < -1e-6:
                 t = -1.0 / slope
-                if 1.0 < t < len(next_head) * 4:
+                if 1.0 < t < len(head_lumas) * 4:
                     tau = float(t)
-    span = int(min(len(next_head), tau * 4)) if tau else \
-        min(36, len(next_head))
+    span = int(min(len(head_lumas), tau * 4)) if tau else \
+        min(36, len(head_lumas))
     return {"step": step, "gain": float(gain), "rgb_gain": rgb_gain,
             "tau": tau, "span": span}
 
 
-def _apply_plan(frames, plan, np):
-    """Fade the correction over the head, in place, in float."""
-    if plan is None:
-        return frames
-    rgb_gain, span, tau = plan["rgb_gain"], plan["span"], plan["tau"]
-    for i in range(min(span, len(frames))):
-        w = float(np.exp(-i / tau)) if tau else 1.0 - (i / float(span))
-        frames[i] = np.clip(frames[i] * (1.0 + (rgb_gain - 1.0) * w),
-                            0, 255)
-    return frames
+def _apply_plan_frame(frame, i, plan, np):
+    """Fade the correction across the head, one frame at a time."""
+    if plan is None or i >= plan["span"]:
+        return frame
+    tau, span = plan["tau"], plan["span"]
+    w = float(np.exp(-i / tau)) if tau else 1.0 - (i / float(span))
+    frame *= (1.0 + (plan["rgb_gain"] - 1.0) * w)
+    return frame
 
 
 def _clip_meta(project, basename):
@@ -278,7 +289,7 @@ def export_from_latents(project, clips, master_path, level_match=True,
     vs = None
     aso = None
     sample_rate = None
-    prev_tail = None
+    prev_stats = None
     matched = []
     fps = 24
 
@@ -293,9 +304,11 @@ def export_from_latents(project, clips, master_path, level_match=True,
             deliver = int(meta.get("frames") or len(frames))
             # the saved latent is the FULL render; delivery keeps the tail
             frames = frames[len(frames) - deliver:]
-            frames = np.ascontiguousarray(frames * 255.0
-                                          if frames.max() <= 1.5
-                                          else frames).astype(np.float32)
+            # NO whole-clip conversion: a 13 second 928x928 clip is 3 GB
+            # of frames, and scaling it as a batch made three more. Each
+            # frame is scaled, corrected and encoded on its own below, so
+            # peak memory is one frame on top of the decode.
+            scale = 255.0 if float(frames.max()) <= 1.5 else 1.0
 
             if vs is None:
                 vs = out.add_stream("libx264", rate=fps)
@@ -307,19 +320,28 @@ def export_from_latents(project, clips, master_path, level_match=True,
                 vs.options = {"crf": str(int(crf)), "preset": str(preset)}
 
             plan = None
-            if level_match and prev_tail is not None:
-                plan = _plan_from_arrays(prev_tail,
-                                         frames[:144].copy(), np)
+            if level_match and prev_stats is not None:
+                head_lumas, head_rgbs = _frame_stats(frames, 144, scale, np)
+                plan = _plan_from_stats(prev_stats[0], prev_stats[1],
+                                        head_lumas, head_rgbs, np)
                 if plan is not None:
-                    frames = _apply_plan(frames, plan, np)
                     matched.append(c.get("index"))
-            prev_tail = frames[-3:].copy()
 
-            for f in frames:
+            for i in range(len(frames)):
+                f = np.asarray(frames[i], dtype=np.float32) * scale
+                f = _apply_plan_frame(f, i, plan, np)
+                np.clip(f, 0, 255, out=f)
                 vf = av.VideoFrame.from_ndarray(
-                    np.clip(f, 0, 255).astype(np.uint8), format="rgb24")
+                    np.ascontiguousarray(f, dtype=np.float32
+                                         ).astype(np.uint8),
+                    format="rgb24")
                 for pkt in vs.encode(vf):
                     out.mux(pkt)
+
+            # the tail this join will be matched against, as statistics
+            tail_l, tail_rgb = _frame_stats(frames[-3:], 3, scale, np)
+            prev_stats = (float(np.mean(tail_l)),
+                          np.mean(np.stack(tail_rgb), axis=0))
             del frames
 
             if audio_vae is not None and "audio" in tensors:

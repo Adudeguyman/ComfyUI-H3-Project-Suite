@@ -14,6 +14,18 @@ roughly halving the wait after each render for a little file size. They
 are review copies; when the master is built from latents nothing in the
 delivered video passes through them at all.
 
+### Long chains export without swapping
+
+The latent export had the same whole-clip conversion the mp4 writer did:
+scaling a decoded clip as a batch, plus a 144-frame copy for level
+matching. Three gigabytes of frames became about ten. It decodes one
+clip at a time, so this was a per-clip ceiling rather than a per-chain
+one, but a long clip would have hit it exactly as saving did.
+
+Frames are now scaled, corrected and encoded individually, and level
+matching runs from per-frame statistics rather than scaled copies of the
+footage - it only ever needed a few hundred numbers.
+
 ### Saving long clips no longer crawls
 
 The mp4 writer converted every frame in one batch - clip(), then times
