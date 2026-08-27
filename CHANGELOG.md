@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### ComfyUI 0.34: nothing patched, older cores unchanged
+
+ComfyUI 0.34.0 places interior keyframe anchors itself and lets a
+keyframe carry audio, placed on the audio grid at the keyframe's
+instant - which is everything this pack's remaining runtime patch was
+for. On such a core the pack now installs NOTHING: the pinned audio is
+emitted as a plain keyframe whose fractional anchor puts the window's
+end exactly where the wrapper used to put it.
+
+Detection stays behavioural rather than reading a version string, so
+backports and forks land on the right path automatically: the full
+patch on 0.31-0.33.0, the audio-only wrapper on #15439-era masters, and
+nothing at all on 0.34 behaviour. The 0.34 check includes a canary
+borrowed from NikoDemon80's 0.4.0: a fractional NEGATIVE anchor must be
+placed literally, because no stock node produces one - an innocent
+int() cast added upstream later would silently move every pinned sound,
+and the pack refuses the native path if that ever happens.
+
 ### Master quality, and cheaper review clips
 
 Exporting from latents now asks how to encode the master - High (CRF

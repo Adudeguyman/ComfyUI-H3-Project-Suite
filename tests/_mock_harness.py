@@ -39,6 +39,52 @@ def _video_t_spans(latent_t):
     return [FRAME_RESCALE * FRAME_PER_TOKEN[k % 5] for k in range(latent_t)]
 
 
+def make_mm_034(ref_advance_factor=1.0):
+    """The 0.34 layout: no frame_count, anchors placed literally at any
+    index (fractional and negative included), and keyframes may carry an
+    audio_latent placed on the audio grid at the keyframe's instant."""
+    mm = make_mm(ref_advance_factor)
+    base = mm.PackedLayout
+
+    class PackedLayout034:
+        def __init__(self, text_len, latent_t, latent_h, latent_w,
+                     audio_t, keyframes=None, refs=None):
+            rows_per_cond = 4
+            # build refs/video/audio through the 0.33 body with no kfs,
+            # then place keyframes the 0.34 way: literal arithmetic
+            base_lay = base(text_len, latent_t, latent_h, latent_w,
+                            audio_t, keyframes=None, refs=refs)
+            segs = list(base_lay.segments)
+            coords = list(base_lay.position_ids[:, 0])
+
+            def emit(kind, ts):
+                a = len(coords)
+                coords.extend(ts)
+                segs.append((a, len(coords), kind))
+
+            for kf in (keyframes or []):
+                p = float(kf["resolved_frame_index"])
+                t = float(text_len) + FRAME_RESCALE * p
+                if kf.get("latent") is not None:
+                    emit("cond", [t] * rows_per_cond)
+                al = kf.get("audio_latent")
+                if al is not None:
+                    rt = int(al.shape[-1])
+                    # one position per audio step, anchored at the
+                    # keyframe's instant, placed literally
+                    emit("cond_audio",
+                         [t + i * (FRAME_RESCALE * 24.0 / 40.0) / 1.0
+                          for i in range(rt)])
+
+            self.segments = segs
+            self.position_ids = np.zeros((len(coords), 4),
+                                         dtype=np.float64)
+            self.position_ids[:, 0] = coords
+
+    mm.PackedLayout = PackedLayout034
+    return mm
+
+
 def make_mm(ref_advance_factor=1.0):
     """Build a fake comfy.ldm.minimax.model. ref_advance_factor != 1
     simulates an upstream change to how refs advance the cursor."""

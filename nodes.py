@@ -45,6 +45,7 @@ except ImportError:  # ComfyUI always ships safetensors; belt and braces
 from .patch_layout import (
     MC_KEY,
     MC_AUDIO_KEY,
+    audio_keyframes_native,
     apply_patch as apply_layout_patch,
     is_applied,
     is_covered as layout_covered,
@@ -639,7 +640,23 @@ class H3Context:
                 # layout patch takes a fractional frame index.
                 end_frame = float(span if anchor_mode == "head" else 0)
                 end_frame += overhang / FRAME_RESCALE
-                ref[MC_AUDIO_KEY] = end_frame
+                if audio_keyframes_native():
+                    # 0.34 places keyframe audio itself: anchor the window
+                    # so it ENDS at end_frame. One audio step spans
+                    # FPS/AUDIO_HZ frames, so the start sits rt steps
+                    # earlier - fractional, sometimes negative, placed
+                    # literally by core (behaviour verified at startup).
+                    start = end_frame - ref_audio_t * (FPS / AUDIO_HZ)
+                    values.setdefault("minimax_keyframes", list(
+                        values.get("minimax_keyframes") or []))
+                    values["minimax_keyframes"] = \
+                        list(values["minimax_keyframes"]) + [{
+                            "resolved_frame_index": start,
+                            "audio_latent": ref["audio_latent"],
+                        }]
+                    ref = None
+                else:
+                    ref[MC_AUDIO_KEY] = end_frame
             # Ref2VA multi-ref compatibility design contributed by seitanism
             # in the Banodoco MiniMax H3 seamless-extension thread.
             # Keep this separate until after the keyframe values are applied.
@@ -648,7 +665,7 @@ class H3Context:
             # replace all of them. Appending also guarantees that the marked
             # Motion Context audio block is last, which _fixup_audio relies on
             # to locate its slot in a multi-ref layout.
-            motion_context_audio_ref = ref
+            motion_context_audio_ref = ref     # None on a native core
 
         out = node_helpers.conditioning_set_values(conditioning, values)
         if motion_context_audio_ref is not None:

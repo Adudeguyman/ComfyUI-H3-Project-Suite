@@ -474,6 +474,49 @@ def _accepts(fn, name):
     return False
 
 
+def _core_places_audio_keyframes():
+    """Does this ComfyUI place a keyframe's audio_latent itself?
+
+    ComfyUI 0.34 lets a keyframe carry audio, placed on the audio grid at
+    the keyframe's instant - which is everything the audio wrapper was
+    for. Two behaviours are required before we trust it, both checked on
+    a real construction rather than a version string:
+
+    - a keyframe with only audio produces cond_audio rows at all, and
+    - a FRACTIONAL, NEGATIVE anchor index is placed literally. Our
+      end-aligned windows depend on fractional anchors, and no stock
+      node produces one, so nothing upstream tests this: an innocent
+      int() cast added later would silently move every pinned sound.
+      (The canary is NikoDemon80's, from his 0.4.0 layout contract.)
+    """
+    if _accepts(getattr(mm.PackedLayout, "__init__", None), "frame_count"):
+        return False          # pre-0.34 shape; the wrapper handles audio
+    try:
+        text_len, latent_t, lh, lw, audio_t = 7, 7, 22, 38, 16
+        anchor = -1.25
+        kf = [{"resolved_frame_index": anchor,
+               "audio_latent": torch.zeros(1, 32, 2, 6)}]
+        probe = mm.PackedLayout.__new__(mm.PackedLayout)
+        mm.PackedLayout.__init__(probe, text_len, latent_t, lh, lw,
+                                 audio_t, keyframes=kf)
+        rows = [(a, b) for a, b, kind in probe.segments
+                if kind == "cond_audio"]
+        if not rows:
+            return False
+        first = float(probe.position_ids[rows[0][0], 0])
+        want = float(text_len) + mm.FRAME_RESCALE * anchor
+        return abs(first - want) < 1e-6
+    except Exception as exc:
+        _LOG.debug("h3_suite: audio-keyframe probe inconclusive (%s)", exc)
+        return False
+
+
+def audio_keyframes_native():
+    """True when the running core places keyframe audio itself, so the
+    nodes should emit plain keyframes and nothing should be patched."""
+    return _mode == "native"
+
+
 def _core_handles_interior_anchors():
     """Does this ComfyUI already place an interior anchor correctly?
 
@@ -589,7 +632,7 @@ def _owned_by_a_sibling():
 
 
 def apply_patch():
-    global _orig_init, _applied, _mode
+    global _orig_init, _applied, _mode, _deferred_to
     if _applied:
         return True
     if not hasattr(mm, "PackedLayout") or not hasattr(mm, "FRAME_RESCALE"):
@@ -598,7 +641,6 @@ def apply_patch():
         return False
     sibling = _owned_by_a_sibling()
     if sibling:
-        global _deferred_to
         _deferred_to = sibling
         _LOG.info("h3_suite: another H3 motion-context pack already owns "
                   "ComfyUI's layout (%s). It uses the same keyframe "
@@ -606,6 +648,16 @@ def apply_patch():
                   "leaving it alone rather than correcting twice.", sibling)
         return False
     if _core_handles_interior_anchors():
+        if _core_places_audio_keyframes():
+            _mode = "native"
+            _deferred_to = ("this ComfyUI, which places interior anchors "
+                            "and keyframe audio itself")
+            _LOG.info(
+                "h3_suite: ComfyUI places interior keyframe anchors AND "
+                "keyframe audio natively (0.34 behaviour, verified "
+                "including fractional negative anchors). Nothing to "
+                "patch; the nodes emit plain keyframes.")
+            return False
         # core owns the video anchors now, but the audio timeline
         # translation was never part of the merged PR - that mechanism is
         # this pack's own and still has to run
