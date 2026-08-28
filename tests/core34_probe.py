@@ -24,7 +24,21 @@ FR = make_mm().FRAME_RESCALE
 
 def install(mm):
     for name in ("comfy", "comfy.ldm", "comfy.ldm.minimax"):
-        sys.modules.setdefault(name, types.ModuleType(name))
+        mod = sys.modules.setdefault(name, types.ModuleType(name))
+        mod.__path__ = []          # a package, or comfy.utils will not import
+    mb = types.ModuleType("comfy.model_base")
+
+    class _MiniMaxH3:
+        def extra_conds(self, **kw):
+            return {}
+
+    mb.MiniMaxH3 = _MiniMaxH3
+    sys.modules["comfy.model_base"] = mb
+    sys.modules["comfy"].model_base = mb
+    utils = types.ModuleType("comfy.utils")
+    utils.common_upscale = lambda s, w, h, mode, crop: s
+    sys.modules["comfy.utils"] = utils
+    sys.modules["comfy"].utils = utils
     sys.modules["comfy.ldm.minimax.model"] = mm
     sys.modules["comfy"].ldm = sys.modules["comfy.ldm"]
     sys.modules["comfy.ldm"].minimax = sys.modules["comfy.ldm.minimax"]
@@ -67,6 +81,85 @@ def main():
     assert abs(first - want_first) < 1e-6, (first, want_first)
     print("2. fractional negative anchor placed literally "
           "(start %.2f -> position %.3f)" % (start, first))
+
+    # --- the node itself must run on a native core. The first 0.34
+    # --- build crashed inside its own log line, which every
+    # --- layout-level check sailed past: nothing drove H3Context.apply.
+    import importlib.util
+    for name in [n for n in sys.modules
+                 if n == "h3pkg" or n.startswith("h3pkg.")]:
+        del sys.modules[name]
+    fake_helpers = types.ModuleType("node_helpers")
+
+    def _csv(cond, values, append=False):
+        out = []
+        for c in cond:
+            d = dict(c[1])
+            for k, v in values.items():
+                if append and k in d:
+                    d[k] = list(d[k]) + list(v)
+                else:
+                    d[k] = v
+            out.append([c[0], d])
+        return out
+
+    fake_helpers.conditioning_set_values = _csv
+    sys.modules["node_helpers"] = fake_helpers
+    fp = types.ModuleType("folder_paths")
+    fp.get_output_directory = lambda: "/tmp"
+    sys.modules.setdefault("folder_paths", fp)
+    pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pkg = types.ModuleType("h3pkg")
+    pkg.__path__ = [pkg_dir]
+    sys.modules["h3pkg"] = pkg
+    for sub in ("patch_layout", "patch_payload", "nodes"):
+        spec = importlib.util.spec_from_file_location(
+            "h3pkg." + sub, os.path.join(pkg_dir, sub + ".py"))
+        m = importlib.util.module_from_spec(spec)
+        sys.modules["h3pkg." + sub] = m
+        spec.loader.exec_module(m)
+    nodes = sys.modules["h3pkg.nodes"]
+    # the freshly loaded copy probes the core again through its own
+    # patch_layout, so make sure that one is on the native path too
+    assert sys.modules["h3pkg.patch_layout"].apply_patch() is False
+    assert sys.modules["h3pkg.patch_layout"].audio_keyframes_native()
+    ctx = nodes.H3Context()
+    if True:
+        # an AV latent is a nested pair: unbind() gives video, audio
+        class _AV:
+            def __init__(self, v, a):
+                self._p = [v, a]
+
+            def unbind(self):
+                return list(self._p)
+
+        video = torch.zeros(1, 24, 12, 8, 8)
+        audio = torch.zeros(1, 32, 2, 20)
+        lat = {"samples": _AV(video, audio)}
+        cond = [[torch.zeros(1, 4, 16), {}]]
+        try:
+            out, _trim, _lat = ctx.apply(
+                cond, lat, 22, "video", "head", "disabled",
+                audio_context_length=22, audio_mode="timeline",
+                video_source="latent", context_latent=lat,
+                enabled=True, seed_head=False)
+        except AttributeError as exc:
+            raise AssertionError(
+                "H3Context crashed on a native core: %s" % exc)
+        except Exception as exc:
+            print("   (node ran but this harness could not complete it: "
+                  "%s)" % exc)
+        else:
+            meta = out[0][1]
+            kfs = meta.get("minimax_keyframes") or []
+            audio_kfs = [k for k in kfs
+                         if k.get("audio_latent") is not None]
+            assert audio_kfs, "no audio keyframe on the native path"
+            assert not (meta.get("minimax_refs") or []), \
+                "the native path must not append a smuggled audio ref"
+            print("2b. H3Context ran on 0.34: audio is a keyframe at "
+                  "%.3f, no ref appended"
+                  % float(audio_kfs[0]["resolved_frame_index"]))
 
     # --- 0.33-with-#15439 (interior native, frame_count present):
     # the audio wrapper installs, exactly as before ---

@@ -115,7 +115,11 @@ class H3ProjectHub:
                    "chain_active, and hands Project Save its identity.")
 
     @classmethod
-    def IS_CHANGED(cls, project_name, create_if_missing=True):
+    def IS_CHANGED(cls, project_name, create_if_missing=True,
+                   **_unused):
+        # **_unused absorbs the optional vae inputs: ComfyUI passes
+        # every declared input here, and a narrower signature warns
+        # on every queue.
         # the widget string is constant while the manifest behind it moves
         # (approve, reject, a finished render). Key the cache on the
         # manifest's identity + mtime so every transition re-resolves.

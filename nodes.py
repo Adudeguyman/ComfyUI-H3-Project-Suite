@@ -624,6 +624,8 @@ class H3Context:
                     audio_vae, context_audio, a_frames / float(FPS))
                 overhang = 0.0  # decoded audio was match_tail-cut at the frame
                 audio_src = "vae"
+            audio_end_frame = 0.0
+            audio_placed_by = "stock ref placement"
             ref = {
                 "kind": "audio",
                 "ref_audio_t": ref_audio_t,
@@ -640,6 +642,7 @@ class H3Context:
                 # layout patch takes a fractional frame index.
                 end_frame = float(span if anchor_mode == "head" else 0)
                 end_frame += overhang / FRAME_RESCALE
+                audio_end_frame = end_frame
                 if audio_keyframes_native():
                     # 0.34 places keyframe audio itself: anchor the window
                     # so it ENDS at end_frame. One audio step spans
@@ -654,9 +657,11 @@ class H3Context:
                             "resolved_frame_index": start,
                             "audio_latent": ref["audio_latent"],
                         }]
+                    audio_placed_by = "core, as a keyframe"
                     ref = None
                 else:
                     ref[MC_AUDIO_KEY] = end_frame
+                    audio_placed_by = "this pack's layout wrapper"
             # Ref2VA multi-ref compatibility design contributed by seitanism
             # in the Banodoco MiniMax H3 seamless-extension thread.
             # Keep this separate until after the keyframe values are applied.
@@ -679,8 +684,8 @@ class H3Context:
                   indices[0], indices[-1], frame_count, width, height, trim,
                   ("%d frames -> %d latent steps (%.3fs) from %s, %s"
                    % (a_frames, ref_audio_t, ref_audio_t / AUDIO_HZ, audio_src,
-                      "on the timeline ending at frame %.3f"
-                      % float(ref.get(MC_AUDIO_KEY))
+                      "on the timeline ending at frame %.3f, placed by %s"
+                      % (audio_end_frame, audio_placed_by)
                       if audio_mode == "timeline" else "stock ref placement"))
                   if ref_audio_t else "off")
         out_latent = latent
