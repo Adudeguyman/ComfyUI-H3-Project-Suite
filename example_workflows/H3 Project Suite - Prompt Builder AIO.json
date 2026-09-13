@@ -1,8 +1,8 @@
 {
   "id": "e3f2b845-8f2c-4b5a-9caf-eac1029d3e7e",
   "revision": 0,
-  "last_node_id": 373,
-  "last_link_id": 705,
+  "last_node_id": 375,
+  "last_link_id": 709,
   "nodes": [
     {
       "id": 120,
@@ -5116,14 +5116,14 @@
           "name": "width",
           "type": "INT",
           "links": [
-            590
+            708
           ]
         },
         {
           "name": "height",
           "type": "INT",
           "links": [
-            591
+            709
           ]
         }
       ],
@@ -5799,12 +5799,59 @@
       ],
       "size": [
         330,
-        234
+        330
       ],
       "flags": {},
       "order": 52,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {
+          "link": 706,
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE"
+        },
+        {
+          "link": 707,
+          "localized_name": "audio_vae",
+          "name": "audio_vae",
+          "shape": 7,
+          "type": "VAE"
+        },
+        {
+          "link": 708,
+          "localized_name": "width",
+          "name": "width",
+          "shape": 7,
+          "type": "INT"
+        },
+        {
+          "link": 709,
+          "localized_name": "height",
+          "name": "height",
+          "shape": 7,
+          "type": "INT"
+        },
+        {
+          "link": null,
+          "localized_name": "project_name",
+          "name": "project_name",
+          "type": "STRING",
+          "widget": {
+            "name": "project_name"
+          }
+        },
+        {
+          "link": null,
+          "localized_name": "create_if_missing",
+          "name": "create_if_missing",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "create_if_missing"
+          }
+        }
+      ],
       "outputs": [
         {
           "name": "project",
@@ -5831,6 +5878,20 @@
           "name": "status",
           "type": "STRING",
           "links": null
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            590
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            591
+          ]
         }
       ],
       "properties": {
@@ -6226,6 +6287,96 @@
       },
       "color": "#1d4a52",
       "bgcolor": "#173035"
+    },
+    {
+      "id": 374,
+      "type": "GetNode",
+      "pos": [
+        -181.2135298863073,
+        6860.630565364967
+      ],
+      "size": [
+        210,
+        58
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 111,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            706
+          ]
+        }
+      ],
+      "title": "Get_video_vae",
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.6",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "video_vae"
+      ],
+      "widgets_values_named": {
+        "Constant": "video_vae"
+      },
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 375,
+      "type": "GetNode",
+      "pos": [
+        -181.2135298863073,
+        6910.630565364967
+      ],
+      "size": [
+        210,
+        58
+      ],
+      "flags": {
+        "collapsed": true
+      },
+      "order": 112,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            707
+          ]
+        }
+      ],
+      "title": "Get_audio_vae",
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.6",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "audio_vae"
+      ],
+      "widgets_values_named": {
+        "Constant": "audio_vae"
+      },
+      "color": "#322",
+      "bgcolor": "#533"
     }
   ],
   "links": [
@@ -6783,16 +6934,16 @@
     ],
     [
       590,
-      115,
-      0,
+      371,
+      4,
       240,
       0,
       "INT"
     ],
     [
       591,
-      115,
-      1,
+      371,
+      5,
       239,
       0,
       "INT"
@@ -7140,6 +7291,38 @@
       372,
       0,
       "H3_REFS"
+    ],
+    [
+      706,
+      374,
+      0,
+      371,
+      0,
+      "VAE"
+    ],
+    [
+      707,
+      375,
+      0,
+      371,
+      1,
+      "VAE"
+    ],
+    [
+      708,
+      115,
+      0,
+      371,
+      2,
+      "INT"
+    ],
+    [
+      709,
+      115,
+      1,
+      371,
+      3,
+      "INT"
     ]
   ],
   "groups": [

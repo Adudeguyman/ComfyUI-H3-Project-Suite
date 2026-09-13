@@ -103,11 +103,38 @@ class H3ProjectHub:
                 "audio_vae": ("VAE", {
                     "tooltip": "Optional. The H3 audio VAE, so imported "
                                "footage keeps its sound."}),
+                # sockets, not widgets: the size comes from whatever you
+                # already choose sizes with - core's Resolution Selector,
+                # a Get Image Size, anything emitting two INTs - rather
+                # than from a second set of pixel boxes to keep in sync
+                "width": ("INT", {
+                    "default": 0, "min": 0, "max": 4096, "forceInput": True,
+                    "tooltip": "Optional. Wire a Resolution Selector (set "
+                               "its multiple to 32) to tell an EMPTY "
+                               "project what size it renders at; imported "
+                               "footage is then conformed to it. Leave "
+                               "unwired to read the size off the clips "
+                               "the project already has."}),
+                "height": ("INT", {
+                    "default": 0, "min": 0, "max": 4096, "forceInput": True,
+                    "tooltip": "See width. A size that contradicts a clip "
+                               "the project already has is refused: every "
+                               "clip in a chain is one size."}),
             },
         }
 
-    RETURN_TYPES = ("H3_PROJECT", "LATENT", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("project", "context_latent", "chain_active", "status")
+    RETURN_TYPES = ("H3_PROJECT", "LATENT", "BOOLEAN", "STRING", "INT",
+                    "INT")
+    RETURN_NAMES = ("project", "context_latent", "chain_active", "status",
+                    "width", "height")
+    OUTPUT_TOOLTIPS = (
+        "this project's identity, for H3 Project Save",
+        "the approved tail's latent, for H3 Context",
+        "false until a clip is approved; arms H3 Context",
+        "what the project is doing, in words",
+        "the project's picture width - wire it into the empty latent so "
+        "every clip renders at one size. 0 until the project has a size",
+        "the project's picture height. 0 until the project has a size")
     FUNCTION = "resolve"
     CATEGORY = "conditioning/minimax"
     DESCRIPTION = ("One project per chain: resolves the approved tail's "
@@ -115,24 +142,39 @@ class H3ProjectHub:
                    "chain_active, and hands Project Save its identity.")
 
     @classmethod
-    def IS_CHANGED(cls, project_name, create_if_missing=True,
-                   **_unused):
+    def IS_CHANGED(cls, project_name, create_if_missing=True, width=0,
+                   height=0, **_unused):
         # **_unused absorbs the optional vae inputs: ComfyUI passes
         # every declared input here, and a narrower signature warns
         # on every queue.
         # the widget string is constant while the manifest behind it moves
         # (approve, reject, a finished render). Key the cache on the
         # manifest's identity + mtime so every transition re-resolves.
+        # width/height ride along because changing them changes what the
+        # node DOES (it declares the size), and that leaves no trace in
+        # the manifest until it has run once.
         try:
             p = Project(folder_paths.get_output_directory(), project_name,
                         create=False)
-            return p.mtime_token()
+            return "%s:%dx%d" % (p.mtime_token(), int(width), int(height))
         except Exception:
             return float("NaN")
 
-    def resolve(self, project_name, create_if_missing=True, vae=None, audio_vae=None):
+    def resolve(self, project_name, create_if_missing=True, vae=None,
+                audio_vae=None, width=0, height=0):
         out_dir = folder_paths.get_output_directory()
         p = Project(out_dir, project_name, create=bool(create_if_missing))
+
+        # a size given here declares what the project renders at, and is
+        # refused if it contradicts a clip already in the chain
+        if width and height:
+            p.set_resolution(width, height)
+        elif width or height:
+            raise ProjectError(
+                "h3_suite: the project size needs both width and height; "
+                "got %dx%d. Leave both at 0 to follow the project."
+                % (width, height))
+        res = p.resolution()
 
         tail_path = p.tail_latent_path()
         if tail_path is not None:
@@ -162,6 +204,7 @@ class H3ProjectHub:
         bits.append("next render: %s" % basename)
         bits.append("continues %s" % (tail["basename"] if tail else
                                       "nothing (fresh clip 1)"))
+        bits.append("%dx%d" % res if res else "size not set yet")
         status = " | ".join(bits)
         if getattr(p, "auto_approve", False):
             _LOG.warning("h3_suite: project %r: %s", p.name, status)
@@ -169,7 +212,8 @@ class H3ProjectHub:
             _LOG.info("h3_suite: project %r: %s", p.name, status)
 
         handle = {"name": p.name, "output_dir": out_dir}
-        return (handle, context, active, status)
+        return (handle, context, active, status,
+                res[0] if res else 0, res[1] if res else 0)
 
 
 def _write_video(path, images, audio, fps, tags=None):

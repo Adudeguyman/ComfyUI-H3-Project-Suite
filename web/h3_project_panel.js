@@ -99,6 +99,10 @@ const CSS = `
   border:1px solid #4a3d20;border-radius:9px;padding:10px 12px;}
 .h3p-confirm.on{display:flex;}
 .h3p-confirm .msg{white-space:pre-wrap;color:#e0c890;font-size:calc(12px * var(--h3p-fs, 1));line-height:1.5;}
+.h3p-pathfield{display:block;width:100%;box-sizing:border-box;margin-top:6px;
+  background:#141821;border:1px solid #4a4128;color:#f0e6cc;border-radius:5px;
+  padding:6px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:calc(12px * var(--h3p-fs, 1));}
 .h3p-rail{border-left:1px solid #2a2f3a;background:#15181e;display:flex;
   flex-direction:column;min-height:0;}
 .h3p-railhead{font-size:calc(10px * var(--h3p-fs, 1));text-transform:uppercase;letter-spacing:.08em;color:#8a93a3;
@@ -157,7 +161,17 @@ table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
   border:1px solid #333c4c;border-radius:7px;color:#dfe4ee;padding:5px 8px;
   font-size:calc(12px * var(--h3p-fs, 1));}
 .h3p-impwrap{display:flex;flex-direction:column;gap:8px;padding:10px 16px;}
-.h3p-impvid{width:100%;max-height:44vh;background:#000;border-radius:8px;}
+.h3p-impvid{width:100%;max-height:44vh;background:#000;border-radius:8px;
+  display:block;}
+/* overflow:hidden is what turns the box's huge spread shadow into a
+   dimming mask over everything the crop drops */
+.h3p-cropwrap{position:relative;line-height:0;overflow:hidden;
+  border-radius:8px;}
+.h3p-cropbox{position:absolute;box-sizing:border-box;
+  border:2px solid #5b8cff;box-shadow:0 0 0 9999px rgba(0,0,0,0.6);
+  pointer-events:auto;}
+.h3p-cropbox::after{content:"";position:absolute;inset:0;
+  border:1px solid rgba(255,255,255,0.35);}
 .h3p-strip{position:relative;height:64px;background:#11151d;
   border:1px solid #2a3140;border-radius:8px;overflow:hidden;
   cursor:grab;user-select:none;}
@@ -299,15 +313,55 @@ function sizeScaledBox(box, baseW, baseH, prefs) {
   if (baseH) box.style.height = `min(${Math.round(baseH * w)}px, 92vh)`;
 }
 
+// Every window listens for Escape on document, so without this check one
+// press closes the window you are in AND the project panel underneath
+// it. Only the most recently opened overlay answers.
+function isTopOverlay(overlay) {
+  if (!overlay || !overlay.isConnected) return false;
+  const all = document.querySelectorAll(".h3p-overlay");
+  return all[all.length - 1] === overlay;
+}
+
 function toast(msg, bad = false) {
   const t = el("div", { class: "h3p-toast" + (bad ? " bad" : ""), text: msg });
   document.body.append(t);
   setTimeout(() => t.remove(), bad ? 5200 : 2600);
 }
 
+// Every state-changing route wants the server's session token in a
+// header. The token comes from a same-origin GET, which a page on
+// another origin can send but never read - that is the whole defence.
+// One shared helper attaches it and retries once when the server says
+// the token is stale (a restart with the editor still open).
+const TOKEN_HEADER = "X-H3Suite-Token";
+let tokenPromise = null;
+function sessionToken(fresh = false) {
+  if (fresh || !tokenPromise) {
+    tokenPromise = api.fetchApi("/h3_suite/token")
+      .then((r) => (r.ok ? r.json()
+                         : Promise.reject(new Error(`token ${r.status}`))))
+      .then((j) => j.token || Promise.reject(new Error("no token in response")))
+      .catch((err) => { tokenPromise = null; throw err; });
+  }
+  return tokenPromise;
+}
+
+async function postApi(path, init = {}) {
+  const send = async (token) => api.fetchApi(path, {
+    ...init, method: "POST",
+    headers: { ...(init.headers || {}), [TOKEN_HEADER]: token },
+  });
+  let resp = await send(await sessionToken());
+  if (resp.status === 403) {
+    const data = await resp.clone().json().catch(() => ({}));
+    if (data.token_required) resp = await send(await sessionToken(true));
+  }
+  return resp;
+}
+
 async function post(path, body) {
-  const r = await api.fetchApi(path, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+  const r = await postApi(path, {
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   const data = await r.json();
@@ -694,6 +748,7 @@ class BranchModal extends ChainTimeline {
 
     this._esc = (e) => {
       if (e.key !== "Escape") return;
+      if (!isTopOverlay(this.overlay)) return;   // a window above owns it
       if (this.drift.classList.contains("on")) {
         this.drift.classList.remove("on");
         return;
@@ -832,20 +887,171 @@ class BranchModal extends ChainTimeline {
  * value, which for every VAE loader is the filename. Nothing has to
  * execute, so Import works on an empty project in a fresh session.
  */
+// a model file, as a loader's widget names one
+const MODEL_FILE = /\.(safetensors|sft|ckpt|pt|pth|bin|gguf)$/i;
+
+function nodeWidgetStrings(node) {
+  // live widget values first (widgets_values is the serialised snapshot
+  // and can trail an edit until the graph is saved)
+  const live = Array.isArray(node?.widgets)
+    ? node.widgets.map((w) => w?.value) : [];
+  const saved = Array.isArray(node?.widgets_values) ? node.widgets_values : [];
+  return [...live, ...saved].filter((v) => typeof v === "string" && v.trim());
+}
+
+function upstreamNode(graph, node, slotIndex) {
+  const slot = node?.inputs?.[slotIndex];
+  if (!slot || slot.link == null) return null;
+  const link = graph.links?.[slot.link];
+  return link ? graph.getNodeById?.(link.origin_id) : null;
+}
+
+/** The model filename a loader somewhere upstream of `node` names.
+ *
+ * The Hub's vae inputs are often not wired straight from a loader but
+ * through a reroute, a switch, or an rgthree Get node whose only widget
+ * is a variable name - "video_vae" is not a file and must not be sent
+ * as one. So: take a filename-looking widget if this node has one,
+ * otherwise jump a Get node to its Set node and follow the first
+ * connected input, a few hops at most.
+ */
+function loaderFileUpstream(graph, node, depth = 0) {
+  if (!node || depth > 8) return null;
+  const file = nodeWidgetStrings(node).find((v) => MODEL_FILE.test(v));
+  if (file) return file;
+  const type = String(node.type || "");
+  if (/^GetNode$/i.test(type) || /\bGet\b/.test(type)) {
+    const varName = nodeWidgetStrings(node)[0];
+    const setter = (graph._nodes || []).find((n) =>
+      n !== node && /Set/.test(String(n.type || "")) &&
+      nodeWidgetStrings(n)[0] === varName);
+    if (setter) return loaderFileUpstream(graph, upstreamNode(graph, setter, 0),
+                                          depth + 1);
+  }
+  for (let i = 0; i < (node.inputs || []).length; i++) {
+    const up = upstreamNode(graph, node, i);
+    if (up) {
+      const found = loaderFileUpstream(graph, up, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Core's Resolution Selector, mirrored so the Hub can say what a given
+// setting will produce BEFORE the queue refuses it. Kept identical to
+// comfy_extras/nodes_resolution.py: megapixels are 1024-based, and each
+// side is rounded (not floored) to the multiple.
+const ASPECT_RATIOS = {
+  "1:1 (Square)": [1, 1],
+  "2:3 (Portrait Photo)": [2, 3],
+  "3:2 (Photo)": [3, 2],
+  "3:4 (Portrait Standard)": [3, 4],
+  "4:3 (Standard)": [4, 3],
+  "9:16 (Portrait Widescreen)": [9, 16],
+  "16:9 (Widescreen)": [16, 9],
+  "21:9 (Ultrawide)": [21, 9],
+};
+const H3_MULTIPLE = 32;
+
+function resolutionFrom(ratio, megapixels, multiple) {
+  const r = ASPECT_RATIOS[ratio];
+  if (!r || !(megapixels > 0) || !(multiple > 0)) return null;
+  const scale = Math.sqrt((megapixels * 1024 * 1024) / (r[0] * r[1]));
+  return { width: Math.round((r[0] * scale) / multiple) * multiple,
+           height: Math.round((r[1] * scale) / multiple) * multiple };
+}
+
+function widgetValue(node, name, positional) {
+  const live = node?.widgets?.find((w) => w?.name === name);
+  if (live && live.value != null) return live.value;
+  const vals = node?.widgets_values;
+  return Array.isArray(vals) ? vals[positional] : undefined;
+}
+
+/** The Resolution Selector feeding this node's width input, if there is
+ *  one, with what it currently produces. */
+function upstreamSelector(node) {
+  try {
+    const graph = node?.graph || app?.graph;
+    if (!graph || !node?.inputs) return null;
+    const idx = node.inputs.findIndex((i) => i && i.name === "width");
+    if (idx < 0) return null;
+    let src = upstreamNode(graph, node, idx);
+    for (let hop = 0; src && hop < 8; hop++) {
+      const ratio = widgetValue(src, "aspect_ratio", 0);
+      if (ratio && ASPECT_RATIOS[ratio]) {
+        const mp = Number(widgetValue(src, "megapixels", 1));
+        const multiple = Number(widgetValue(src, "multiple", 2)) || 8;
+        return { ratio, mp, multiple,
+                 size: resolutionFrom(ratio, mp, multiple) };
+      }
+      src = upstreamNode(graph, src, 0);   // through a reroute
+    }
+  } catch (e) { /* an unreadable graph just means no advice */ }
+  return null;
+}
+
+/** A Resolution Selector setting that lands exactly on w x h, preferring
+ *  the ratio already chosen. */
+function selectorSettingFor(w, h, preferRatio) {
+  const names = Object.keys(ASPECT_RATIOS);
+  if (preferRatio && names.includes(preferRatio)) {
+    names.splice(names.indexOf(preferRatio), 1);
+    names.unshift(preferRatio);
+  }
+  for (const ratio of names) {
+    for (let mp = 1; mp <= 160; mp++) {          // 0.1 .. 16.0 MP
+      const got = resolutionFrom(ratio, mp / 10, H3_MULTIPLE);
+      if (got && got.width === w && got.height === h) {
+        return `${ratio.split(" ")[0]} at ${(mp / 10).toFixed(1)} MP`;
+      }
+    }
+  }
+  return null;
+}
+
+/** The Hub summary's size line: red only when the next queue would be
+ *  refused, so red always means "this is about to fail". */
+function hubSizeLine(node, state) {
+  const res = state?.resolution || null;
+  const sel = upstreamSelector(node);
+  const px = (s) => `${s.width} × ${s.height}`;
+  const red = (t) => `<div class="h3p-autowarn">⚠ ${t}</div>`;
+
+  if (sel && sel.multiple !== H3_MULTIPLE) {
+    return red(`Resolution Selector's <b>multiple</b> is ${sel.multiple} ` +
+      `— set it to ${H3_MULTIPLE}. H3 needs both sides a multiple ` +
+      `of ${H3_MULTIPLE}, and the next queue will be refused.`);
+  }
+  if (sel && res && sel.size &&
+      (sel.size.width !== res.width || sel.size.height !== res.height)) {
+    const fix = selectorSettingFor(res.width, res.height, sel.ratio);
+    return red(`Resolution Selector gives ${px(sel.size)} but this ` +
+      `project is ${px(res)}. ` +
+      (fix ? `Set it to <b>${fix}</b>, ` : "Match it, ") +
+      `or unwire it — the next queue will be refused.`);
+  }
+  if (res) {
+    return `<br><span class="nx">renders at ${px(res)}</span>`;
+  }
+  if (sel && sel.size) {
+    return `<br><span class="nx">first clip will set this project to ` +
+      `${px(sel.size)}</span>`;
+  }
+  return `<br><span class="nx">size not set — the first clip ` +
+    `decides it</span>`;
+}
+
 function wiredVaeNames(node, inputNames = ["vae", "audio_vae"]) {
   const out = [];
   try {
     const graph = node?.graph || app?.graph;
     if (!graph || !node?.inputs) return out;
     for (const want of inputNames) {
-      const slot = node.inputs.find((i) => i && i.name === want);
-      if (!slot || slot.link == null) continue;
-      const link = graph.links?.[slot.link];
-      if (!link) continue;
-      const src = graph.getNodeById?.(link.origin_id);
-      const vals = src?.widgets_values;
-      const name = Array.isArray(vals) ? vals.find(
-        (v) => typeof v === "string" && v.trim()) : null;
+      const idx = node.inputs.findIndex((i) => i && i.name === want);
+      if (idx < 0) continue;
+      const name = loaderFileUpstream(graph, upstreamNode(graph, node, idx));
       if (name && out.indexOf(name) === -1) out.push(name);
     }
   } catch (e) { /* an unreadable graph just means no names */ }
@@ -889,6 +1095,29 @@ class ImportModal {
     this.video = el("video", { class: "h3p-impvid", controls: false,
                                preload: "metadata" });
     this.video.addEventListener("timeupdate", () => this.drawHead());
+    // the crop box sits over the picture, not over the element: a video
+    // letterboxes itself inside its box, so every rectangle here is
+    // measured against the real picture area (see paintCrop)
+    this.cropBox = el("div", { class: "h3p-cropbox" });
+    this.cropBox.addEventListener("mousedown", (e) => this.grabCrop(e));
+    this.cropWrap = el("div", { class: "h3p-cropwrap" },
+                       this.video, this.cropBox);
+    this.cropOffset = 0.5;          // 0 = top/left, 1 = bottom/right
+    this.fitMode = "fill";          // "fill" crops, "fit" adds bars
+    this.fillBtn = el("button", { class: "h3p-btn on", text: "Fill",
+      title: "crop to the project's shape, losing the edges",
+      onclick: () => this.setFit("fill") });
+    this.fitBtn = el("button", { class: "h3p-btn", text: "Fit",
+      title: "keep the whole frame and add bars",
+      onclick: () => this.setFit("fit") });
+    this.cropHint = el("span", { class: "h3p-hint" });
+    this.cropRow = el("div", { class: "h3p-inline" },
+      el("span", { class: "h3p-takelabel", text: "framing" }),
+      this.fillBtn, this.fitBtn, this.cropHint);
+    for (const ev of ["loadedmetadata", "resize"]) {
+      this.video.addEventListener(ev, () => this.paintCrop());
+    }
+    window.addEventListener("resize", () => this.paintCrop());
     this.stripImgs = el("div", { class: "h3p-stripimgs" });
     this.cutL = el("div", { class: "h3p-cut" });
     this.cutR = el("div", { class: "h3p-cut" });
@@ -907,7 +1136,7 @@ class ImportModal {
                                     onclick: () => this.doImport() });
     this.body = el("div", { class: "h3p-impwrap" },
       this.empty, this.fileInput,
-      this.video, this.strip, this.info2,
+      this.cropWrap, this.strip, this.info2, this.cropRow,
       el("div", { class: "h3p-inline" },
         el("span", { class: "h3p-takelabel", text: "length" }), this.lenSel,
         el("div", { class: "h3p-spacer" }),
@@ -936,7 +1165,10 @@ class ImportModal {
                          onclick: () => this.loadFiles() })),
         this.body,
         this.dropZone));
-    this._esc = (e) => { if (e.key === "Escape") this.close(); };
+    this._esc = (e) => {
+      // only the topmost window answers; see isTopOverlay
+      if (e.key === "Escape" && isTopOverlay(this.overlay)) this.close();
+    };
 
     // drag events fire per child element, so a plain enter/leave pair
     // flickers; count them instead
@@ -976,8 +1208,7 @@ class ImportModal {
     const fd = new FormData();
     fd.append("file", file, file.name);
     try {
-      const r = await api.fetchApi("/h3_suite/source/upload",
-                                   { method: "POST", body: fd });
+      const r = await postApi("/h3_suite/source/upload", { body: fd });
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       await this.loadFiles(d.rel);
@@ -994,7 +1225,111 @@ class ImportModal {
                     loadScalePrefs());
     } catch (e) { /* a corrupt pref must not block the import */ }
     document.addEventListener("keydown", this._esc);
+    // the project's picture size, if it has one: an import must match
+    // it, and the info line says so before anything is encoded
+    this.projectRes = this.panel.state?.resolution || null;
+    if (!this.projectRes) {
+      try {
+        this.projectRes = (await getState(this.panel.name())).resolution
+          || null;
+      } catch (e) { this.projectRes = null; }
+    }
     await this.loadFiles();
+  }
+
+  setFit(mode) {
+    this.fitMode = mode;
+    this.fillBtn.className = "h3p-btn" + (mode === "fill" ? " on" : "");
+    this.fitBtn.className = "h3p-btn" + (mode === "fit" ? " on" : "");
+    this.paintCrop();
+    if (this.info) this.render();
+  }
+
+  /** Where the picture actually is inside the video element, and what
+   *  the kept rectangle is within it. Null when there is nothing to
+   *  choose: no metadata yet, or the aspects already agree. */
+  cropGeometry() {
+    const v = this.video;
+    const sw = v.videoWidth, sh = v.videoHeight;
+    if (!sw || !sh || !this.info) return null;
+    const t = this.targetSize();
+    const cw = v.clientWidth, ch = v.clientHeight;
+    if (!cw || !ch) return null;
+    // a video letterboxes itself inside its element
+    const shown = Math.min(cw / sw, ch / sh);
+    const pw = sw * shown, ph = sh * shown;
+    const px = (cw - pw) / 2, py = (ch - ph) / 2;
+
+    const ta = t.width / t.height, sa = sw / sh;
+    let keepW = sw, keepH = sh, axis = null;
+    if (Math.abs(sa - ta) > 0.001) {
+      if (sa > ta) { keepW = sh * ta; axis = "x"; }
+      else { keepH = sw / ta; axis = "y"; }
+    }
+    const slackX = sw - keepW, slackY = sh - keepH;
+    const x0 = slackX * (axis === "x" ? this.cropOffset : 0.5);
+    const y0 = slackY * (axis === "y" ? this.cropOffset : 0.5);
+    return { axis, shown, target: t,
+             left: px + x0 * shown, top: py + y0 * shown,
+             width: keepW * shown, height: keepH * shown,
+             pictureLeft: px, pictureTop: py,
+             pictureWidth: pw, pictureHeight: ph,
+             slack: axis === "x" ? slackX : slackY,
+             lost: axis === "x" ? slackX / sw : slackY / sh };
+  }
+
+  paintCrop() {
+    const g = this.cropGeometry();
+    const box = this.cropBox;
+    if (!g || !g.axis || this.fitMode !== "fill") {
+      box.style.display = "none";
+    } else {
+      box.style.display = "";
+      box.style.left = `${g.left}px`;
+      box.style.top = `${g.top}px`;
+      box.style.width = `${g.width}px`;
+      box.style.height = `${g.height}px`;
+      box.style.cursor = g.axis === "x" ? "ew-resize" : "ns-resize";
+    }
+    if (this.cropRow) {
+      const off = !g || !g.axis;
+      this.cropRow.style.display = off ? "none" : "flex";
+      if (!off) {
+        this.cropHint.textContent = this.fitMode === "fill"
+          ? `drag the box — ${Math.round(g.lost * 100)}% of the ` +
+            `${g.axis === "x" ? "width" : "height"} is cut`
+          : "whole frame kept, bars added";
+      }
+    }
+  }
+
+  grabCrop(ev) {
+    const g = this.cropGeometry();
+    if (!g || !g.axis || !g.slack) return;
+    ev.preventDefault();
+    const startPos = g.axis === "x" ? ev.clientX : ev.clientY;
+    const startOff = this.cropOffset;
+    const span = g.slack * g.shown;      // travel, in screen pixels
+    const move = (e) => {
+      const d = (g.axis === "x" ? e.clientX : e.clientY) - startPos;
+      this.cropOffset = Math.max(0, Math.min(startOff + d / span, 1));
+      this.paintCrop();
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      this.render();
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  }
+
+  // what the server will encode this footage at (see target_size)
+  targetSize() {
+    if (this.projectRes) return { ...this.projectRes, why: "project" };
+    const snap = (n) => Math.max(32, Math.floor(n / 32) * 32);
+    return { width: snap(this.info.width), height: snap(this.info.height),
+             why: "source" };
   }
 
   close() {
@@ -1199,9 +1534,28 @@ class ImportModal {
       `${(this.len / 24).toFixed(2)}s)</span>` +
       (drop ? `<span class="drop">dropping ${drop} frame${
         drop === 1 ? "" : "s"} (${(drop / 24).toFixed(2)}s)</span>` : "") +
-      (i.has_audio ? "" : "<span>no audio track</span>");
+      (i.has_audio ? "" : "<span>no audio track</span>") +
+      this.sizeNote();
+    this.paintCrop();
     const names = wiredVaeNames(this.panel.node);
     if (!names.length) this.checkVaes();
+  }
+
+  sizeNote() {
+    const i = this.info;
+    const t = this.targetSize();
+    const same = t.width === i.width && t.height === i.height;
+    const aspectOff =
+      Math.abs(i.width / i.height - t.width / t.height) > 0.01;
+    const how = !aspectOff ? "resized"
+      : (this.fitMode === "fit" ? "fitted with bars" : "cropped and resized");
+    if (t.why === "project") {
+      if (same) return `<span>${i.width}×${i.height}, as the project</span>`;
+      return `<span class="drop">${how} ${i.width}×${i.height} → ` +
+        `<b>${t.width}×${t.height}</b> to match the project</span>`;
+    }
+    return `<span>${same ? "" : `${i.width}×${i.height} → `}` +
+      `<b>${t.width}×${t.height}</b> sets the project's size</span>`;
   }
 
   async doImport() {
@@ -1209,11 +1563,13 @@ class ImportModal {
     this.importBtn.disabled = true;
     toast("decoding and encoding the window\u2026");
     try {
+      const t = this.targetSize();
       const out = await post("/h3_suite/source/import", {
         name: this.panel.name(), rel: this.file,
         start: this.start, frames: this.len,
-        width: this.info.width, height: this.info.height,
-        crop: "center", with_audio: !!this.info.has_audio,
+        width: t.width, height: t.height,
+        fit: this.fitMode, crop_offset: this.cropOffset,
+        with_audio: !!this.info.has_audio,
         vae_names: wiredVaeNames(this.panel.node),
       });
       const im = out.imported || {};
@@ -1401,8 +1757,9 @@ class ProjectModal extends ChainTimeline {
                          title: "bring in outside footage as a clip, " +
                                 "choosing what to keep",
                          onclick: () => new ImportModal(this).open() }),
-          el("button", { class: "h3p-btn", text: "Open folder",
-                         title: "opens on the machine running ComfyUI",
+          el("button", { class: "h3p-btn", text: "Copy folder path",
+                         title: "where this project lives, on the machine " +
+                                "running ComfyUI",
                          onclick: () => this.openFolder() }),
           el("button", { class: "h3p-btn", text: "Measure drift",
                          title: "how brightness, contrast, sharpness and " +
@@ -1430,7 +1787,10 @@ class ProjectModal extends ChainTimeline {
         this.drift,
         el("div", { class: "h3p-foot" }, this.footText)));
 
-    this._esc = (e) => { if (e.key === "Escape") this.close(); };
+    this._esc = (e) => {
+      // only the topmost window answers; see isTopOverlay
+      if (e.key === "Escape" && isTopOverlay(this.overlay)) this.close();
+    };
     this._onExec = () => this.refresh(true);
     // coming back to the tab is the moment a missed 'executed' shows up,
     // so re-read then too. Cheap: one small JSON fetch.
@@ -1841,11 +2201,54 @@ class ProjectModal extends ChainTimeline {
   }
 
   async openFolder() {
+    // the server reports where the project lives and nothing more: it
+    // does not launch a file manager (that would run on whichever
+    // machine hosts ComfyUI, and a web request should not start
+    // programs there). The path stays on screen until closed, so it can
+    // still be copied by hand when the browser refuses to copy it.
     try {
-      const out = await post("/h3_suite/project/open_folder",
-                             { name: this.name() });
-      toast(`opened ${out.path}`);
+      const r = await api.fetchApi(
+        `/h3_suite/project/folder?name=${encodeURIComponent(this.name())}`);
+      const out = await r.json();
+      if (!r.ok || out.error) throw new Error(out.error || r.statusText);
+      this.showFolderPath(out.path);
     } catch (e) { toast(e.message, true); }
+  }
+
+  showFolderPath(path) {
+    const field = el("input", { class: "h3p-pathfield" });
+    field.readOnly = true;
+    field.spellcheck = false;
+    field.value = path;
+    field.addEventListener("focus", () => field.select());
+    const copyBtn = el("button", { class: "h3p-btn primary", text: "Copy" });
+    copyBtn.onclick = async () => {
+      let ok = false;
+      try {
+        // the clipboard API needs a secure page: localhost or https
+        await navigator.clipboard.writeText(path);
+        ok = true;
+      } catch (e) {
+        // plain http over a LAN has no clipboard API, but copying the
+        // current selection still works there
+        try {
+          field.focus();
+          field.select();
+          ok = document.execCommand("copy");
+        } catch (e2) { ok = false; }
+      }
+      copyBtn.textContent = ok ? "Copied" : "Select it and copy";
+    };
+    this.confirmMsg.replaceChildren(
+      el("div", { text: "Project folder, on the machine running ComfyUI:" }),
+      field);
+    this.confirmBtns.replaceChildren(
+      copyBtn,
+      el("button", { class: "h3p-btn", text: "Close",
+                     onclick: () => this.hideConfirm() }));
+    this.confirm.classList.add("on");
+    field.focus();
+    field.select();
   }
 
   async measureDrift() {
@@ -2193,6 +2596,11 @@ class ProjectModal extends ChainTimeline {
       if (sig !== this._sig) {
         this._sig = sig;
         this.curSeg = null;
+        // the standby buffer is remembered by POSITION, and the clip at a
+        // position just changed: an imported take 3 sits where take 2 was.
+        // Trusting it swaps the stale file in at the join and plays the
+        // old take under the new take's label, so forget it.
+        this.standbySeg = null;
         this.timeEl.innerHTML =
           "<span class='h3p-measuring'>measuring clips\u2026</span>";
         this.measure(s.clips).then(() => {
@@ -2205,7 +2613,18 @@ class ProjectModal extends ChainTimeline {
             ? Math.max(0, (this.timeline.find(
                 (x) => x.clip.basename === pend.basename)?.start || 0) - 2)
             : 0;
-          this.seekGlobal(jump, false);
+          // and PLAY it when the pending take just changed under an open
+          // panel - an import landing, a re-roll finishing, a take picked.
+          // Parking paused there leaves the previous clip's last frame on
+          // screen, which reads as "the new take never arrived". First
+          // open and switching project stay paused, as before.
+          const prev = this._timelinePending;
+          const now = { project: name,
+                        basename: pend ? pend.basename : null };
+          this._timelinePending = now;
+          const arrived = !!(prev && prev.project === now.project &&
+                             now.basename && prev.basename !== now.basename);
+          this.seekGlobal(jump, arrived);
           this.startTicker();
         });
       } else {
@@ -2440,38 +2859,64 @@ app.registerExtension({
       this.addDOMWidget("h3p_summary", "div", summary,
                         { serialize: false, getMinHeight: () => 64 });
 
+      // paint from the cached state plus a live read of the graph, so
+      // turning the Resolution Selector's dial updates the warning
+      // without another round trip
+      this._h3PaintSummary = () => {
+        const name = this.widgets?.find(
+          (w) => w.name === "project_name")?.value;
+        const s = this._h3State;
+        if (!name) return;
+        if (!s || s._name !== name) {
+          summary.textContent =
+            `${name}: not created yet \u2014 open the project panel or ` +
+            `queue once`;
+          return;
+        }
+        const approved = s.clips.filter(
+          (c) => c.status === "approved").length;
+        const pend = s.pending;
+        const warn = s.auto_approve
+          ? `<div class="h3p-autowarn">\u26a0 Auto-approval is on \u2014 ` +
+            `the chain is progressing without manual review</div>`
+          : "";
+        const html = warn +
+          `<b>${name}</b> \u00b7 ${approved} approved` +
+          (pend ? ` \u00b7 <span class="pend">clip ${pend.index} ` +
+                  `take ${pend.take} pending review</span>` : "") +
+          `<br><span class="nx">next: ${s.next_save.basename}` +
+          `</span> \u00b7 ` +
+          (s.chain_active ? `<span class="ok">chain active</span>`
+                          : `chain inactive`) +
+          hubSizeLine(this, s);
+        if (html !== this._h3Html) {       // don't churn the DOM
+          this._h3Html = html;
+          summary.innerHTML = html;
+        }
+      };
+
       this._h3RefreshSummary = async () => {
         const name = this.widgets?.find(
           (w) => w.name === "project_name")?.value;
         if (!name) return;
         try {
           const s = await getState(name);
-          const approved = s.clips.filter(
-            (c) => c.status === "approved").length;
-          const pend = s.pending;
-          const warn = s.auto_approve
-            ? `<div class="h3p-autowarn">\u26a0 Auto-approval is on \u2014 ` +
-              `the chain is progressing without manual review</div>`
-            : "";
-          summary.innerHTML = warn +
-            `<b>${name}</b> \u00b7 ${approved} approved` +
-            (pend ? ` \u00b7 <span class="pend">clip ${pend.index} ` +
-                    `take ${pend.take} pending review</span>` : "") +
-            `<br><span class="nx">next: ${s.next_save.basename}` +
-            `</span> \u00b7 ` +
-            (s.chain_active ? `<span class="ok">chain active</span>`
-                            : `chain inactive`);
+          s._name = name;
+          this._h3State = s;
         } catch (e) {
-          summary.textContent =
-            `${name}: not created yet \u2014 open the project panel or ` +
-            `queue once`;
+          this._h3State = null;
         }
+        this._h3PaintSummary();
       };
       this._h3RefreshSummary();
       api.addEventListener("executed", this._h3RefreshSummary);
+      // the selector's widgets can change at any time and nothing
+      // announces it; repainting is a graph read and a string compare
+      this._h3Timer = setInterval(() => this._h3PaintSummary(), 1000);
       const origRemoved = this.onRemoved;
       this.onRemoved = function () {
         api.removeEventListener("executed", this._h3RefreshSummary);
+        clearInterval(this._h3Timer);
         origRemoved?.apply(this, arguments);
       };
       this.size = [Math.max(this.size[0], 300),

@@ -44,8 +44,9 @@ class _Routes:
 
 class _Web:
     @staticmethod
-    def json_response(data, status=200):
-        return types.SimpleNamespace(data=data, status=status)
+    def json_response(data, status=200, headers=None):
+        return types.SimpleNamespace(data=data, status=status,
+                                     headers=headers or {})
 
     class FileResponse:
         def __init__(self, path):
@@ -75,13 +76,19 @@ for sub in ("project", "level_match", "chain_report", "routes"):
 
 from h3rc.project import Project  # noqa: E402
 
+_routes = sys.modules["h3rc.routes"]
+
 
 class FakeRequest:
-    """What the panel's post() produces: a JSON body, no query string."""
+    """What the panel's post() produces: a JSON body, no query string,
+    the session token and a JSON content type."""
 
-    def __init__(self, body):
+    def __init__(self, body, path="/h3_suite/probe"):
         self._body = body
+        self.path = path
         self.rel_url = types.SimpleNamespace(query={})
+        self.headers = {_routes.TOKEN_HEADER: _routes._TOKEN}
+        self.content_type = "application/json"
 
     async def json(self):
         return self._body
@@ -93,7 +100,7 @@ class FakeRequest:
 def call(method, path, body):
     handler = REGISTRY[(method, path)]
     return asyncio.get_event_loop().run_until_complete(
-        handler(FakeRequest(body)))
+        handler(FakeRequest(body, path)))
 
 
 def main():

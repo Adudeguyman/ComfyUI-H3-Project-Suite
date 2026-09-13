@@ -42,8 +42,9 @@ class _Routes:
 
 class _Web:
     @staticmethod
-    def json_response(data, status=200):
-        return types.SimpleNamespace(data=data, status=status)
+    def json_response(data, status=200, headers=None):
+        return types.SimpleNamespace(data=data, status=status,
+                                     headers=headers or {})
 
     class FileResponse:
         def __init__(self, path):
@@ -106,6 +107,9 @@ class Req:
     def __init__(self, parts):
         self._parts = parts
         self.rel_url = types.SimpleNamespace(query={})
+        _routes = sys.modules["h3up.routes"]
+        self.headers = {_routes.TOKEN_HEADER: _routes._TOKEN}
+        self.content_type = "multipart/form-data"
 
     async def multipart(self):
         return Reader(self._parts)
@@ -171,6 +175,17 @@ def main():
         (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")) for n in names)
     assert len(names) >= 3, names
     print("6. listing: %d videos, nothing else" % len(names))
+
+    # a file that is not a video is never probed or served, even from
+    # inside the input folder
+    open(os.path.join(_IN, "notes.txt"), "w").write("secret")
+    for path in ("/h3_suite/source/probe", "/h3_suite/source/file"):
+        req = Req([])
+        req.rel_url.query = {"rel": "notes.txt"}
+        res = _run(REGISTRY[("GET", path)](req))
+        assert res.status in (400, 404) and "not a video" in res.data["error"], (
+            path, getattr(res, "data", res))
+    print("7. a non-video inside the input folder is refused by probe and file")
 
     print("all checks passed")
 

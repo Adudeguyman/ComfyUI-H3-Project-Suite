@@ -1,0 +1,5 @@
+# Files comfy-cli leaves out of the registry package. gitignore syntax.
+# The probes are developer tooling: they exec source snippets and import
+# modules by name to fake ComfyUI, which is noise to a security scan and
+# of no use to an installed pack.
+tests/

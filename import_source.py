@@ -298,8 +298,87 @@ def read_audio(path, start, frames, source_fps=None, target_sr=32000):
     return wave[:, a:b]
 
 
+def snap_size(width, height):
+    """The largest H3-renderable size at or below the given one."""
+    # imported here, not at module scope: every relative import in this
+    # file is function-local so the probes can load it on its own
+    from .project import SIZE_STEP
+    w = max(SIZE_STEP, int(width) // SIZE_STEP * SIZE_STEP)
+    h = max(SIZE_STEP, int(height) // SIZE_STEP * SIZE_STEP)
+    return w, h
+
+
+def target_size(project, src_width, src_height, want_width=0,
+                want_height=0):
+    """(width, height, why) an import into this project must be encoded at.
+
+    A project with clips already has a picture size, and an import must
+    match it or the next clip cannot continue from it and the master
+    cannot join it: 'project'. An empty project is sized by the import,
+    from the requested size if one was given, else from the footage,
+    snapped to what H3 can render: 'source'.
+    """
+    res = project.resolution()
+    if res:
+        return res[0], res[1], "project"
+    if want_width and want_height:
+        w, h = snap_size(want_width, want_height)
+    else:
+        w, h = snap_size(src_width, src_height)
+    return w, h, "source"
+
+
+def conform_frames(images, target_w, target_h, fit="fill", offset=0.5):
+    """[T,H,W,C] footage -> exactly target_w x target_h.
+
+    fit="fill" keeps the whole frame height (or width) and drops the
+    other axis to reach the target shape; `offset` says where that
+    window sits, 0 at the top or left, 1 at the bottom or right, 0.5
+    centred - the panel's draggable box sends the value it showed you.
+    fit="fit" keeps the entire frame and adds bars instead.
+
+    The crop is a slice of real pixels; only the scale interpolates.
+    """
+    import torch
+
+    from .nodes import _resize
+
+    src_h, src_w = int(images.shape[1]), int(images.shape[2])
+    if (src_w, src_h) == (target_w, target_h):
+        return images
+    offset = min(max(float(offset), 0.0), 1.0)
+    src_aspect = src_w / float(src_h)
+    tgt_aspect = target_w / float(target_h)
+
+    if fit == "fit":
+        # the whole frame, scaled to fit inside the target, bars around it
+        scale = min(target_w / float(src_w), target_h / float(src_h))
+        inner_w = max(1, int(round(src_w * scale)) // 2 * 2)
+        inner_h = max(1, int(round(src_h * scale)) // 2 * 2)
+        inner = _resize(images, inner_w, inner_h, "disabled")
+        out = torch.zeros((images.shape[0], target_h, target_w,
+                           inner.shape[-1]), dtype=inner.dtype,
+                          device=inner.device)
+        x = (target_w - inner_w) // 2
+        y = (target_h - inner_h) // 2
+        out[:, y:y + inner_h, x:x + inner_w, :] = inner
+        return out
+
+    if abs(src_aspect - tgt_aspect) > 1e-3:
+        if src_aspect > tgt_aspect:          # too wide: take a column
+            keep_w = max(1, int(round(src_h * tgt_aspect)))
+            x = int(round((src_w - keep_w) * offset))
+            images = images[:, :, x:x + keep_w, :]
+        else:                                 # too tall: take a band
+            keep_h = max(1, int(round(src_w / tgt_aspect)))
+            y = int(round((src_h - keep_h) * offset))
+            images = images[:, y:y + keep_h, :, :]
+    return _resize(images, target_w, target_h, "disabled")
+
+
 def import_window(project, path, start, frames, width, height,
-                  crop="center", with_audio=True, vae_names=None):
+                  crop="center", with_audio=True, vae_names=None,
+                  fit="fill", crop_offset=0.5):
     """Decode a window, encode it, and write it into the project.
 
     Everything the chain needs for a first clip: the AV latent, the
@@ -323,24 +402,47 @@ def import_window(project, path, start, frames, width, height,
     audio_vae = vaes.get("audio")
 
     arr, info = read_window(path, start, frames)
-    images = torch.from_numpy(arr)
-    if width and height:
-        from .nodes import _resize
-        images = _resize(images, int(width), int(height), crop)
+    tw, th, why = target_size(project, info["width"], info["height"],
+                              width, height)
+    if why == "project" and width and height and (int(width), int(height)) != (tw, th):
+        _LOG.info("h3_suite: import asked for %dx%d; the project is %dx%d "
+                  "and every clip must match it", width, height, tw, th)
+    # this runs from a route, not from the executor, so nothing has
+    # switched autograd off for us; an encode with it on keeps every
+    # layer's activations and fills the GPU (see export_latents)
+    with torch.inference_mode():
+        images = torch.from_numpy(arr)
+        if (int(images.shape[2]), int(images.shape[1])) != (tw, th):
+            images = conform_frames(images, tw, th, fit=fit,
+                                    offset=crop_offset)
+            _LOG.info("h3_suite: import %s %dx%d -> %dx%d (%s)",
+                      "fitted with bars" if fit == "fit"
+                      else "cropped at %d%% and scaled"
+                           % round(float(crop_offset) * 100),
+                      info["width"], info["height"], tw, th,
+                      "to match the project" if why == "project"
+                      else "sets the project size")
 
-    parts = [vae.encode(images[..., :3])]
-    audio_dict = None
-    if with_audio and audio_vae is not None and info["has_audio"]:
-        sr = int(getattr(audio_vae, "audio_sample_rate", 32000))
-        wave = read_audio(path, start, frames, target_sr=sr)
-        if wave is not None:
-            w = torch.from_numpy(np.ascontiguousarray(wave))[None]
-            w, _note = conform_audio(w, sr, sr, frames,
-                                     lambda x, a, b: x)
-            audio_dict = {"waveform": w, "sample_rate": sr}
-            parts.append(audio_vae.encode(w))
+        parts = [vae.encode(images[..., :3])]
+        audio_dict = None
+        if with_audio and audio_vae is not None and info["has_audio"]:
+            sr = int(getattr(audio_vae, "audio_sample_rate", 32000))
+            wave = read_audio(path, start, frames, target_sr=sr)
+            if wave is not None:
+                w = torch.from_numpy(np.ascontiguousarray(wave))[None]
+                w, _note = conform_audio(w, sr, sr, frames,
+                                         lambda x, a, b: x)
+                audio_dict = {"waveform": w, "sample_rate": sr}
+                # core's VAE.encode takes channels LAST ([B, S, C]) and
+                # swaps to [B, C, S] itself; handing it ComfyUI's AUDIO
+                # layout directly makes the DAC encoder see two samples
+                # of S channels and fail on its first convolution
+                parts.append(audio_vae.encode(w.movedim(1, -1)))
 
-    latent = torch.stack(parts) if len(parts) > 1 else parts[0]
+    # the two streams are saved side by side below, straight from parts.
+    # There is deliberately no combined latent here: an H3 AV latent is a
+    # NestedTensor, not a stack (the streams have different shapes), and
+    # nothing in this function needs one.
 
     from .nodes import _st_save
     from .project_nodes import _write_video, _now_iso

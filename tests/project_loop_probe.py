@@ -142,7 +142,7 @@ def main():
     ctx_node = nodes.H3Context()
 
     # ---- 1: empty project resolves inactive ----
-    handle, context, active, status = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
     assert active is False
     assert "fresh clip 1" in status and "clip_001_take1" in status
     tok0 = pn.H3ProjectHub.IS_CHANGED("LoopTest")
@@ -206,15 +206,15 @@ def main():
           "meta all carry prompt/workflow/dimensions")
 
     # still inactive: pending does not arm the chain, but token moved
-    handle, context, active, status = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
     assert active is False and "PENDING" in status
     assert pn.H3ProjectHub.IS_CHANGED("LoopTest") != tok0
     print("4. pending clip does not arm the chain; IS_CHANGED moved")
 
     # ---- 5: approve via manifest (what the route does), re-resolve ----
-    from h3p.project import Project
+    from h3p.project import Project, ProjectError
     Project(out, "LoopTest").approve()
-    handle, context, active, status = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
     assert active is True
     src = context["samples"]
     parts = src.parts if hasattr(src, "parts") else src
@@ -246,19 +246,68 @@ def main():
     proj = Project(out, "LoopTest")
     assert [t["take"] for t in proj.takes_of(2)] == [1, 2]
     proj.select_take(2, 1)
-    handle, context, active, status = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
     assert "clip_002_take1" in status or proj.pending()["take"] == 1
     Project(out, "LoopTest").reject()
     # reject clears every take of the dropped clip
     assert os.path.isfile(os.path.join(trash, "clip_002_take1.mp4"))
     assert os.path.isfile(os.path.join(trash, "clip_002_take2.mp4"))
-    handle, context, active, status = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
     assert active is True and "clip_002_take1" in status
     assert float((context["samples"].parts if hasattr(
         context["samples"], "parts") else context["samples"])[0]
         .a[0, 0, 0, 0, 0]) == 1.0  # still chains from clip 1
     print("7. re-roll kept both takes, switching works, reject cleared "
           "every take; chain still tails clip 1")
+
+    # ---- 8: the project's size, declared on the Hub and read back ----
+    # a chain that already has clips reports their size and refuses a
+    # contradiction; an empty project can be told its size up front
+    clip1 = Project(out, "LoopTest").clips[0]["meta"]
+    assert (vw, vh) == (clip1["width"], clip1["height"]), (vw, vh)
+    try:
+        hub.resolve("LoopTest", True, width=1216, height=672)
+    except ProjectError as exc:
+        assert "one size" in str(exc), exc
+    else:
+        raise AssertionError("a size contradicting clip 1 was accepted")
+    # the same size the clips already are is not a contradiction
+    _h, _c, _a, _s, w2, h2 = hub.resolve("LoopTest", True,
+                                         width=clip1["width"],
+                                         height=clip1["height"])
+    assert (w2, h2) == (clip1["width"], clip1["height"])
+
+    empty = Project(out, "SizeDecl", create=True)
+    assert empty.resolution() is None
+    _h, _c, _a, st, w3, h3 = hub.resolve("SizeDecl", True, width=1216,
+                                         height=672)
+    assert (w3, h3) == (1216, 672), (w3, h3)
+    assert "1216x672" in st, st
+    # it survives a reload, so an import into this empty project conforms
+    assert Project(out, "SizeDecl").resolution() == (1216, 672)
+    # and a size H3 cannot render is refused with the nearest that works
+    try:
+        hub.resolve("SizeDecl2", True, width=960, height=540)
+    except ProjectError as exc:
+        assert "multiple of 32" in str(exc) and "960x544" in str(exc), exc
+        assert "Resolution Selector" in str(exc), exc
+    else:
+        raise AssertionError("960x540 was accepted")
+    # one side alone is a wiring mistake, not a size
+    try:
+        hub.resolve("SizeDecl", True, width=1216)
+    except ProjectError as exc:
+        assert "both width and height" in str(exc), exc
+    else:
+        raise AssertionError("width without height was accepted")
+    # changing the widget must re-run the node, or the declaration never
+    # reaches the manifest
+    t_a = pn.H3ProjectHub.IS_CHANGED("SizeDecl", True, 1216, 672)
+    t_b = pn.H3ProjectHub.IS_CHANGED("SizeDecl", True, 1248, 832)
+    assert t_a != t_b, "IS_CHANGED ignores the size widgets"
+    print("8. size: read from the clips, declared on an empty project, "
+          "contradictions and off-grid sizes refused, IS_CHANGED follows "
+          "the widgets")
 
     print("all checks passed")
 

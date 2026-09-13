@@ -160,6 +160,19 @@ def _encode_tail_audio(audio_vae, audio, seconds):
     return z, int(z.shape[-1])
 
 
+def _av_latent(parts):
+    """Pair a video and an audio latent the way ComfyUI's own H3 nodes do.
+
+    Core carries an H3 AV latent as a NestedTensor of two differently
+    shaped streams, video [B,24,T,H,W] and audio [B,32,2,T40]. Building
+    it with torch.stack looks right and raises, because stack requires
+    equal shapes; it only ever appeared to work when there was no audio
+    and the single stream was returned on its own.
+    """
+    import comfy.nested_tensor
+    return comfy.nested_tensor.NestedTensor(tuple(parts))
+
+
 def _streams_from_latent(latent):
     """Unpack an H3 AV latent into its contained streams.
 
@@ -875,9 +888,13 @@ class H3ImportSource:
             if note:
                 report += "\n" + note[0].upper() + note[1:] + "."
             audio_out = {"waveform": wave, "sample_rate": vae_sr}
-            parts.append(audio_vae.encode(wave))
+            # channels last for core's VAE.encode, as the Context node
+            # above does; AUDIO is [B, C, S] and the encoder wants [B, S, C]
+            parts.append(audio_vae.encode(wave.movedim(1, -1)))
 
-        latent = {"samples": torch.stack(parts) if len(parts) > 1
+        # an H3 AV latent is a NestedTensor pair, not a stack: video is
+        # [B,24,T,H,W] and audio [B,32,2,T40], so torch.stack refuses them
+        latent = {"samples": _av_latent(parts) if len(parts) > 1
                   else video_latent}
         _LOG.info("h3_suite: import - %s", report.replace("\n", " "))
         return (latent, frames, audio_out, report)
@@ -997,6 +1014,51 @@ class H3ContextTrim:
         return (out_images, out_audio)
 
 
+def _inside_output(path):
+    """True when path resolves inside ComfyUI's output folder.
+
+    realpath on both sides, so a symlink inside the tree pointing out of
+    it is caught; commonpath rather than startswith, so a sibling folder
+    whose name merely begins with the root's is not mistaken for it.
+    """
+    try:
+        root = os.path.realpath(folder_paths.get_output_directory())
+        real = os.path.realpath(path)
+        return os.path.commonpath((root, real)) == root
+    except (OSError, ValueError):
+        return False
+
+
+def _contain_prefix(prefix):
+    """Normalise a save prefix and refuse one that would leave the output
+    folder.
+
+    Every widget on a node is free text, and a workflow can be queued by
+    anyone who can reach /prompt, so the prefix is untrusted by
+    construction. Core's save helper rejects an escaping prefix itself,
+    but this node should not have to be trusted on that: check here, with
+    the same realpath + commonpath test the routes use, and fail loudly
+    rather than quietly rewriting what the user typed. Only a whole '..'
+    segment is refused, so a name like 'a..b' survives intact.
+    """
+    prefix = (prefix or "").replace("\\", "/")
+    if len(prefix) >= 2 and prefix[1] == ":" and prefix[0].isalpha():
+        prefix = prefix[2:]                       # Windows drive letter
+    while "//" in prefix:
+        prefix = prefix.replace("//", "/")        # UNC / doubled slashes
+    prefix = prefix.lstrip("/")                   # absolute -> relative
+    if any(seg == ".." for seg in prefix.split("/")):
+        raise ValueError(
+            "h3_suite: filename_prefix must stay inside ComfyUI's output "
+            "folder; remove '..' from it.")
+    if not _inside_output(os.path.join(folder_paths.get_output_directory(),
+                                       prefix)):
+        raise ValueError(
+            "h3_suite: filename_prefix resolves outside ComfyUI's output "
+            "folder.")
+    return prefix
+
+
 def _resolve_latent_path(path, clip_index=0):
     """Turn the loader's path input into a concrete file.
 
@@ -1017,6 +1079,15 @@ def _resolve_latent_path(path, clip_index=0):
     if not p:
         p = "h3_context"
     candidates = [p, os.path.join(folder_paths.get_output_directory(), p)]
+    # the path is a free-text widget, so it is whatever anyone who can
+    # queue a workflow typed. Only the output folder is readable through
+    # it: an absolute path elsewhere on the machine is refused, not
+    # silently mapped somewhere
+    candidates = [c for c in candidates if _inside_output(c)]
+    if not candidates:
+        raise ValueError(
+            "h3_suite: latent_path must point inside ComfyUI's output "
+            "folder (a relative path, or an absolute path within it).")
     for c in candidates:
         if os.path.isfile(c):
             return c
@@ -1140,6 +1211,7 @@ class H3ContextSaveLatent:
                 "sampler output of an H3 AV graph.")
         video = parts[0].cpu().contiguous()
         audio = parts[1].cpu().contiguous()
+        filename_prefix = _contain_prefix(filename_prefix)
         folder, filename, counter, _, _ = folder_paths.get_save_image_path(
             filename_prefix, folder_paths.get_output_directory())
         if int(clip_index) > 0:

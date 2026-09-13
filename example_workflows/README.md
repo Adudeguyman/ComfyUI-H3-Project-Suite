@@ -50,6 +50,13 @@ is what you want while you're still working on a prompt.
   against 1 fps and joins drift.
 - **H3 Project Save** takes the *trimmed* images and audio but the
   *untrimmed* sampler latent — the next clip conditions on the full one.
+- The **VAE loaders** and the **Resolution Selector** also feed the
+  **H3 Project Hub**. The Hub never renders with the VAEs; the panel
+  reads which loaders they come from so **Import…** can encode footage
+  without asking. The size passes *through* the Hub to the video node, so
+  every clip renders at the project's real size, and the Hub warns in red
+  if the selector disagrees with a chain that already exists. Keep the
+  selector's `multiple` at 32.
 - SaveVideo / VHS Combine are optional. The project writes its own mp4
   either way, so mute them unless you want a second copy.
 

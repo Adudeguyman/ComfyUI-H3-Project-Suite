@@ -2,18 +2,107 @@
 
 The Hub node RESOLVES state; changing it (approve, reject, reopen, purge)
 happens here, out of band of graph execution, so a review click never needs
-a queue press. The panel UI will call these; until it exists they work from
-curl. Every route re-reads the manifest fresh -- the node side notices via
-IS_CHANGED on the next queue press.
+a queue press. Every route re-reads the manifest fresh -- the node side
+notices via IS_CHANGED on the next queue press.
+
+Who may change state. ComfyUI has no login, so every POST here is guarded
+three ways before its handler runs (see SECURITY.md):
+
+  1. the request must not be cross-site by the browser's own account
+     (Sec-Fetch-Site / Origin against Host);
+  2. it must carry the session token in the X-H3Suite-Token header. The
+     token is minted once per server process and handed out only by a
+     same-origin GET, which a page on another origin can send but can
+     never read;
+  3. a JSON route must say Content-Type: application/json, so a cross-
+     origin page cannot reach it without a CORS preflight the server
+     never approves.
+
+From a shell the same sequence is: GET /h3_suite/token, then POST with
+that header. A GET never changes anything on disk.
 
 Registered only when ComfyUI's PromptServer is importable; headless tests
 import this module without it and get a no-op.
 """
 
+import hmac
 import logging
 import os
+import secrets
 
 _LOG = logging.getLogger("h3_suite")
+
+# One random token per server process. Every state-changing route demands
+# it in a request header; the panel fetches it from a same-origin GET.
+_TOKEN = secrets.token_urlsafe(32)
+TOKEN_HEADER = "X-H3Suite-Token"
+
+# the only files the import side will list, probe, serve or decode
+_VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+
+
+def _host_port(value):
+    """('host', port or None) from a Host header or an Origin's authority.
+
+    Hand-parsed rather than via a URL library: the two forms that matter
+    are host[:port] and [ipv6]:port, and anything else is not a value a
+    browser would send as its own origin, so it parses as no host at all
+    and is refused upstream.
+    """
+    v = (value or "").strip().lower()
+    if "@" in v:                              # no browser sends userinfo
+        return "", None
+    if v.startswith("["):                     # [ipv6] or [ipv6]:port
+        end = v.find("]")
+        if end < 0:
+            return "", None
+        host, rest = v[1:end], v[end + 1:]
+    else:
+        host, sep, port = v.partition(":")
+        rest = (":" + port) if sep else ""
+    if not host:
+        return "", None
+    if not rest:
+        return host, None
+    if not rest.startswith(":") or not rest[1:].isdigit():
+        return "", None
+    return host, int(rest[1:])
+
+
+def _authority(origin):
+    """host[:port] out of an Origin such as https://h:1 - nothing else."""
+    _scheme, sep, rest = origin.strip().partition("://")
+    return rest.split("/", 1)[0] if sep else ""
+
+
+def is_cross_site(headers):
+    """True when the browser says this request came from another origin.
+
+    Sec-Fetch-Site is authoritative when present: only same-origin and
+    user-initiated (none) requests pass. Without it, an Origin header must
+    name the same host as Host, tolerating one side carrying a default
+    port the other omits. A request with neither header (a shell tool)
+    is not cross-site; the token check is what stands between it and a
+    side effect.
+    """
+    site = (headers.get("Sec-Fetch-Site") or "").strip().lower()
+    if site and site not in ("same-origin", "none"):
+        return True
+    origin = (headers.get("Origin") or "").strip()
+    if not origin:
+        return False
+    if origin.lower() == "null":
+        return True
+    o_host, o_port = _host_port(_authority(origin))
+    h_host, h_port = _host_port(headers.get("Host") or "")
+    if not o_host or not h_host or o_host != h_host:
+        return True
+    return not (o_port == h_port or o_port is None or h_port is None)
+
+
+def token_ok(headers):
+    sent = (headers.get(TOKEN_HEADER) or "").encode("utf-8", "replace")
+    return hmac.compare_digest(sent, _TOKEN.encode("utf-8"))
 
 try:
     from aiohttp import web
@@ -37,9 +126,12 @@ def _register():
 
     def _state(p):
         index, take, basename = p.next_save()
+        res = p.resolution()
         return {
             "name": p.name,
             "auto_approve": bool(getattr(p, "auto_approve", False)),
+            "resolution": ({"width": res[0], "height": res[1]}
+                           if res else None),
             "clips": p.clips,
             "chain_active": p.chain_active(),
             "pending": p.pending(),
@@ -47,8 +139,31 @@ def _register():
                           "basename": basename},
         }
 
+    def _guard(request, json_only=True):
+        """None when the request may change state, else the refusal.
+
+        Order matters for what a probe learns: cross-site is refused
+        before the token is even looked at, so a foreign page holding a
+        stolen token still gets nothing.
+        """
+        if is_cross_site(request.headers):
+            return web.json_response(
+                {"error": "cross-site request refused"}, status=403)
+        if not token_ok(request.headers):
+            return web.json_response(
+                {"error": "missing or stale session token",
+                 "token_required": True}, status=403)
+        if json_only and request.content_type != "application/json":
+            return web.json_response(
+                {"error": "expected Content-Type: application/json"},
+                status=415)
+        return None
+
     def _json_post(handler):
         async def wrapped(request):
+            denied = _guard(request)
+            if denied is not None:
+                return denied
             try:
                 body = await request.json()
             except Exception:
@@ -56,11 +171,29 @@ def _register():
             try:
                 return web.json_response(handler(body))
             except ProjectError as exc:
+                # the panel shows this as a toast that fades; log it too,
+                # or a refused import looks like one that did nothing
+                _LOG.warning("h3_suite: %s refused: %s",
+                             request.path, exc)
                 return web.json_response({"error": str(exc)}, status=400)
             except Exception as exc:  # keep the panel debuggable
                 _LOG.exception("h3_suite route failed")
                 return web.json_response({"error": str(exc)}, status=500)
         return wrapped
+
+    @routes.get("/h3_suite/token")
+    async def token(request):
+        """The session token, to same-origin callers only.
+
+        The cross-site check on a GET is what keeps the token private
+        when ComfyUI runs with --enable-cors-header: a permissive CORS
+        policy would otherwise let another origin read this response.
+        """
+        if is_cross_site(request.headers):
+            return web.json_response(
+                {"error": "cross-site request refused"}, status=403)
+        return web.json_response({"token": _TOKEN},
+                                 headers={"Cache-Control": "no-store"})
 
     @routes.get("/h3_suite/projects")
     async def projects(request):
@@ -332,41 +465,32 @@ def _register():
         out["branched_from"] = dest.branched_from
         return out
 
-    @routes.post("/h3_suite/project/open_folder")
-    @_json_post
-    def open_folder(body):
-        import subprocess
-        import sys
-        import folder_paths as fp
-        p = Project(fp.get_output_directory(), body.get("name"))
+    @routes.get("/h3_suite/project/folder")
+    async def folder(request):
+        """Where the project lives on the machine running ComfyUI.
+
+        The panel shows this so the user can open it themselves. The
+        server does not launch a file manager: that would be a program
+        started by a web request, and it would open on the wrong machine
+        whenever ComfyUI runs over --listen anyway.
+        """
+        try:
+            p = _project(request)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
         target = os.path.realpath(p.root)
         if not os.path.isdir(target):
-            raise ProjectError("h3_suite: %s does not exist." % target)
-        # this opens on the machine RUNNING ComfyUI, not the one running
-        # the browser - obvious locally, surprising over --listen, so the
-        # response carries the path for the panel to report either way
-        try:
-            if sys.platform == "darwin":
-                subprocess.Popen(["open", target])
-            elif os.name == "nt":
-                os.startfile(target)  # noqa: S606
-            else:
-                subprocess.Popen(["xdg-open", target],
-                                 stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL,
-                                 start_new_session=True)
-        except FileNotFoundError:
-            raise ProjectError(
-                "h3_suite: no file manager opener available on the server "
-                "(%s). The folder is at %s" % (sys.platform, target))
-        return {"path": target}
+            return web.json_response(
+                {"error": "h3_suite: %s does not exist." % target},
+                status=404)
+        return web.json_response({"path": target})
 
     @routes.post("/h3_suite/project/export")
     @_json_post
     def export(body):
         import shutil
-        import subprocess
         import folder_paths as fp
+        from .concat import concat_copy, concat_reencode
         p = Project(fp.get_output_directory(), body.get("name"))
         clips = list(p.approved())
         # a pending clip can be appended for a seamless preview of the
@@ -377,6 +501,8 @@ def _register():
             clips.append(p.pending())
         if not clips:
             raise ProjectError("h3_suite: nothing to export.")
+        from .project import check_uniform_size
+        check_uniform_size(clips)
         if body.get("use_latents"):
             from .export_latents import export_from_latents
             default = _suggest_export(p, preview)[:-4]
@@ -399,10 +525,6 @@ def _register():
             return {"exported": fname, "from_latents": True,
                     "level_matched": info["level_matched"],
                     "preview": bool(preview)}
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            raise ProjectError("h3_suite: ffmpeg not found on PATH; "
-                               "install it to export a master.")
         missing = [c["basename"] for c in clips
                    if not os.path.isfile(p.clip_video_path(c["basename"]))]
         if missing:
@@ -432,10 +554,6 @@ def _register():
                     if plan is not None:
                         paths[i] = dst
                         matched.append(clips[i]["index"])
-        list_path = os.path.join(p.root, ".concat.txt")
-        with open(list_path, "w", encoding="utf-8") as fh:
-            for path in paths:
-                fh.write("file '%s'\n" % path.replace("'", "'\\''"))
         # no explicit name means the first FREE name, never a silent
         # overwrite of a master someone already kept
         default = _suggest_export(p, preview)[:-4]
@@ -448,23 +566,22 @@ def _register():
                 "folder.")
         # untouched clips are identical by construction and stream copy;
         # once any clip has been re-encoded for level matching the whole
-        # concat has to be re-encoded so the parameters agree
-        if matched:
-            cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i",
-                   list_path, "-c:v", "libx264", "-crf", "17",
-                   "-pix_fmt", "yuv420p", "-c:a", "aac",
-                   "-movflags", "+faststart", master]
-        else:
-            cmd = [ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i",
-                   list_path, "-c", "copy", master]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        os.unlink(list_path)
-        if tmp_dir and os.path.isdir(tmp_dir):
-            import shutil as _sh
-            _sh.rmtree(tmp_dir, ignore_errors=True)
-        if proc.returncode != 0:
-            raise ProjectError("h3_suite: ffmpeg concat failed: %s"
-                               % proc.stderr[-400:])
+        # join has to be re-encoded so the parameters agree
+        try:
+            if matched:
+                concat_reencode(paths, master, crf=17, preset="medium")
+            else:
+                concat_copy(paths, master)
+        except Exception as exc:
+            try:
+                os.unlink(master)         # never leave a half-written master
+            except OSError:
+                pass
+            raise ProjectError("h3_suite: joining the clips failed: %s"
+                               % exc)
+        finally:
+            if tmp_dir and os.path.isdir(tmp_dir):
+                shutil.rmtree(tmp_dir, ignore_errors=True)
         out = _state(p)
         out["master"] = master
         out["preview"] = bool(preview)
@@ -482,12 +599,20 @@ def _register():
         return os.path.realpath(getter())
 
     def _safe_source(rel):
-        """A path inside ComfyUI's input folder, or nothing."""
+        """A video inside ComfyUI's input folder, or nothing.
+
+        Both halves matter: the folder bounds where a read can land, and
+        the extension bounds what kind of file this side will ever open
+        or serve - the same list the picker shows and the upload accepts.
+        """
         root = _input_root()
         real = os.path.realpath(os.path.join(root, rel or ""))
         if os.path.commonpath([real, root]) != root:
             raise ProjectError("h3_suite: that file is outside ComfyUI's "
                                "input folder.")
+        if not real.lower().endswith(_VIDEO_EXTS):
+            raise ProjectError("h3_suite: %s is not a video this can open "
+                               "(%s)." % (rel, ", ".join(_VIDEO_EXTS)))
         if not os.path.isfile(real):
             raise ProjectError("h3_suite: no such file: %s" % rel)
         return real
@@ -499,7 +624,7 @@ def _register():
             root = _input_root()
         except ProjectError as exc:
             return web.json_response({"error": str(exc)}, status=400)
-        exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+        exts = _VIDEO_EXTS
         out = []
         for dirpath, _dirs, files in os.walk(root):
             for f in files:
@@ -523,9 +648,15 @@ def _register():
         into place, so a half-received upload never appears in the
         picker as a playable file.
         """
-        import shutil
         import tempfile
 
+        # multipart is a CORS-simple content type, so this is the route a
+        # cross-origin page could reach with no preflight at all: the
+        # origin check and the token are what stop it. The JSON check
+        # cannot apply here and is skipped on purpose.
+        denied = _guard(request, json_only=False)
+        if denied is not None:
+            return denied
         try:
             root = _input_root()
         except ProjectError as exc:
@@ -535,7 +666,7 @@ def _register():
             os.makedirs(dest_dir, exist_ok=True)
         except OSError as exc:
             return web.json_response({"error": str(exc)}, status=500)
-        exts = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+        exts = _VIDEO_EXTS
         try:
             reader = await request.multipart()
         except Exception as exc:
@@ -629,6 +760,8 @@ def _register():
                 width=int(body.get("width") or 0),
                 height=int(body.get("height") or 0),
                 crop=body.get("crop") or "center",
+                fit=("fit" if body.get("fit") == "fit" else "fill"),
+                crop_offset=float(body.get("crop_offset", 0.5)),
                 with_audio=bool(body.get("with_audio", True)),
                 vae_names=body.get("vae_names") or None)
         except RuntimeError as exc:

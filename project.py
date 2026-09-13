@@ -48,6 +48,10 @@ VERSION = 1
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$")
 _BASENAME_RE = re.compile(r"^clip_(\d{3})_take(\d+)$")
 
+# H3 latents are a sixteenth of the picture and the model patches them
+# 2x2, so both sides have to be a multiple of 32 pixels
+SIZE_STEP = 32
+
 VIDEO_EXT = ".mp4"
 LATENT_EXT = ".safetensors"
 SIDECAR_EXT = ".json"
@@ -69,6 +73,29 @@ def validate_name(name):
         raise ProjectError("h3_suite: project name %r is not a plain "
                            "folder name." % name)
     return name
+
+
+def check_uniform_size(clips):
+    """Refuse a set of clips that are not all one picture size.
+
+    Every join assumes one size: a stream-copied master would carry a
+    packet stream the container cannot describe, and a re-encode would
+    fail on the first frame of the odd clip out. Better to name the
+    clip here than to write a broken file or die halfway through.
+    """
+    seen = {}
+    for c in clips:
+        meta = c.get("meta") or {}
+        if meta.get("width") and meta.get("height"):
+            seen.setdefault((int(meta["width"]), int(meta["height"])),
+                            c.get("index"))
+    if len(seen) > 1:
+        raise ProjectError(
+            "h3_suite: the clips are not all one size (%s). A chain has "
+            "one picture size; re-render or re-import the odd one out."
+            % ", ".join("clip %s is %dx%d" % (i, w, h)
+                        for (w, h), i in sorted(seen.items(),
+                                                key=lambda kv: kv[1])))
 
 
 def projects_root(output_dir):
@@ -258,6 +285,7 @@ class Project:
             self.clips = []
             self.branched_from = None
             self.auto_approve = False
+            self.declared_size = None
             self._write()
         else:
             raise ProjectError(
@@ -277,11 +305,20 @@ class Project:
         self.clips = list(data.get("clips", []))
         self.branched_from = data.get("branched_from")
         self.auto_approve = bool(data.get("auto_approve", False))
+        # declared before any clip exists (the Hub's width/height inputs);
+        # absent in manifests written before this was a thing, which is
+        # why it is read with a default rather than required
+        res = data.get("resolution") or None
+        self.declared_size = ((int(res["width"]), int(res["height"]))
+                              if res else None)
         self._check_invariants()
 
     def _write(self):
         self._check_invariants()
         data = {"version": VERSION, "name": self.name, "clips": self.clips}
+        if getattr(self, "declared_size", None):
+            data["resolution"] = {"width": self.declared_size[0],
+                                  "height": self.declared_size[1]}
         if getattr(self, "auto_approve", False):
             data["auto_approve"] = True
         if getattr(self, "branched_from", None):
@@ -331,6 +368,63 @@ class Project:
 
     def approved(self):
         return [c for c in self.clips if c["status"] == "approved"]
+
+    def resolution(self):
+        """(width, height) every clip in this project is, or None when
+        the project has no size yet.
+
+        A chain hands each clip's latent to the next, and a master is
+        one video stream, so a project has exactly one picture size. It
+        comes from whichever clip arrived first, or from a size declared
+        on the Hub before any clip existed - which is what lets an import
+        into an empty project land at the size the graph will render at.
+        """
+        for c in self.clips:
+            meta = c.get("meta") or {}
+            if meta.get("width") and meta.get("height"):
+                return int(meta["width"]), int(meta["height"])
+        return getattr(self, "declared_size", None)
+
+    def set_resolution(self, width, height):
+        """Declare the size this project renders at. Returns (w, h).
+
+        Refuses a size H3 cannot render, and refuses to contradict a
+        clip that already exists: the chain was conditioned at that
+        size and every later clip has to match it.
+        """
+        width, height = int(width), int(height)
+        if width <= 0 or height <= 0:
+            raise ProjectError("h3_suite: a project size needs both a "
+                               "width and a height.")
+        if width % SIZE_STEP or height % SIZE_STEP:
+            raise ProjectError(
+                "h3_suite: %dx%d is not a size H3 can render; both sides "
+                "must be a multiple of %d (nearest: %dx%d). If this came "
+                "from a Resolution Selector, set its 'multiple' to %d."
+                % (width, height, SIZE_STEP,
+                   max(SIZE_STEP, round(width / SIZE_STEP) * SIZE_STEP),
+                   max(SIZE_STEP, round(height / SIZE_STEP) * SIZE_STEP),
+                   SIZE_STEP))
+        for c in self.clips:
+            meta = c.get("meta") or {}
+            if meta.get("width") and meta.get("height"):
+                have = (int(meta["width"]), int(meta["height"]))
+                if have != (width, height):
+                    raise ProjectError(
+                        "h3_suite: clip %d is %dx%d but the Hub is being "
+                        "told %dx%d. Every clip in a chain must be one "
+                        "size - set the size back to %dx%d, unwire it "
+                        "from the Hub (it reads the size off the clips "
+                        "anyway), or start a new project."
+                        % (c["index"], have[0], have[1], width, height,
+                           have[0], have[1]))
+                return have
+        if getattr(self, "declared_size", None) != (width, height):
+            self.declared_size = (width, height)
+            self._write()
+            _LOG.info("h3_suite: project %r renders at %dx%d",
+                      self.name, width, height)
+        return width, height
 
     def chain_tail(self):
         """The approved clip the NEXT render continues from, or None."""

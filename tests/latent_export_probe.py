@@ -180,6 +180,8 @@ def main():
     fake_fp.get_full_path = lambda kind, name: (
         "/fake/" + name if "vae" in name else None)
     sys.modules["folder_paths"] = fake_fp
+    fake_fp.get_filename_list = lambda kind: [
+        "h3_video_vae.safetensors", "h3_audio_vae.safetensors"]
     cs = types.ModuleType("comfy.sd")
     cs.VAE = FakeSD.VAE
     cu = types.ModuleType("comfy.utils")

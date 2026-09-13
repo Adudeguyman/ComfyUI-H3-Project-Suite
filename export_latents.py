@@ -110,12 +110,23 @@ def load_vaes_for(project, clips, names=None):
             "inputs - the panel reads them straight from the loaders, "
             "so nothing needs to run first.")
 
+    # only names ComfyUI itself lists for the vae folder are opened. The
+    # list comes from the panel or a sidecar, neither of which gets to
+    # point the loader at an arbitrary file just because it exists
+    try:
+        listed = set(folder_paths.get_filename_list("vae"))
+    except Exception:
+        listed = set()
     found = {}
     problems = []
     for name in seen:
         if len(found) == 2:
             break
         try:
+            if name not in listed:
+                problems.append("%s: not a file ComfyUI lists in the vae "
+                                "folder" % name)
+                continue
             path = folder_paths.get_full_path("vae", name)
             if not path:
                 problems.append("%s: not found in the vae folder" % name)
@@ -129,11 +140,19 @@ def load_vaes_for(project, clips, names=None):
         except Exception as exc:
             problems.append("%s: %s" % (name, exc))
     if "video" not in found:
+        hint = ""
+        if not any(n.lower().endswith((".safetensors", ".sft", ".ckpt",
+                                       ".pt", ".pth", ".bin", ".gguf"))
+                   for n in seen):
+            hint = (" None of those is a model file: the Hub's vae inputs "
+                    "are probably wired through a switch, reroute or "
+                    "Get node the panel could not see past. Wire the "
+                    "VAE loaders in directly, or name the files here.")
         raise RuntimeError(
-            "h3_suite: could not load a video VAE for the export. Tried "
-            "%s.%s" % (", ".join(seen),
-                       (" Errors: " + "; ".join(problems)) if problems
-                       else ""))
+            "h3_suite: could not load a video VAE. Tried %s.%s%s"
+            % (", ".join(seen),
+               (" Errors: " + "; ".join(problems)) if problems else "",
+               hint))
     return found
 
 
@@ -141,6 +160,33 @@ def _require():
     import av
     import numpy as np
     return av, np
+
+
+# the sample rates the aac encoder accepts
+_AAC_RATES = (8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
+              64000, 88200, 96000)
+
+
+def _inference():
+    """No autograd for model work that runs outside the executor.
+
+    ComfyUI runs every node under torch.inference_mode(). A route handler
+    inherits nothing of the sort, and a VAE decode with autograd live
+    keeps every layer's activations for a backward pass that never
+    comes: the whole GPU fills within a second on a clip the graph
+    decodes in a few, with a peak two orders of magnitude higher. Same
+    context here.
+
+    torch is looked up, not imported: a real VAE cannot exist without it
+    already loaded, and importing it here would drag a few hundred MB
+    into a process that only fakes the decode (the memory probe).
+    """
+    import contextlib
+    import sys
+    torch = sys.modules.get("torch")
+    if torch is None or not hasattr(torch, "inference_mode"):
+        return contextlib.nullcontext()
+    return torch.inference_mode()
 
 
 def _frames_from_decode(out):
@@ -161,7 +207,16 @@ def _frames_from_decode(out):
 
 
 def _waveform_from_decode(out):
-    """Whatever an audio VAE hands back -> [C, S] float."""
+    """Whatever an audio VAE hands back -> [C, S] float, levelled the way
+    ComfyUI's own audio decode node levels it.
+
+    Core's VAE.decode returns audio channels-LAST ([B, S, C]); its decode
+    node swaps that to [B, C, S] and then divides by five standard
+    deviations (never boosting). The review clips were written from that
+    node's output, so the master applies the same two steps, or its
+    sound would be a transposed handful of samples and, once fixed, a
+    different loudness from what was reviewed.
+    """
     import numpy as np
     t = out
     if isinstance(t, dict):
@@ -173,6 +228,11 @@ def _waveform_from_decode(out):
         t = t[0]
     if t.ndim == 1:
         t = t[None, :]
+    if t.shape[0] > 8 >= t.shape[1]:      # [S, C] -> [C, S]
+        t = np.ascontiguousarray(t.T)
+    std = float(t.std()) * 5.0
+    if std > 1.0:
+        t = t / std
     return t
 
 
@@ -273,6 +333,11 @@ def export_from_latents(project, clips, master_path, level_match=True,
     vae = ready["video"]
     audio_vae = ready.get("audio")
 
+    # one picture size, checked before anything is decoded: the encoder
+    # is opened at the first clip's size and would fail on the odd one
+    from .project import check_uniform_size
+    check_uniform_size(clips)
+
     # every latent must exist BEFORE the first frame is written: a master
     # that silently swapped one clip to its MP4 would misrepresent itself
     missing = [c["basename"] for c in clips
@@ -292,6 +357,17 @@ def export_from_latents(project, clips, master_path, level_match=True,
     prev_stats = None
     matched = []
     fps = 24
+    abuf = None          # sound waiting to be emitted in whole frames
+    audio_pts = 0        # running sample position on the output stream
+
+    def _encode_audio(seg, pts):
+        af = av.AudioFrame.from_ndarray(np.ascontiguousarray(seg),
+                                        format="fltp", layout="stereo")
+        af.sample_rate = sample_rate
+        af.pts = pts
+        for pkt in aso.encode(af):
+            out.mux(pkt)
+        return pts + int(seg.shape[1])
 
     try:
         for c in clips:
@@ -300,7 +376,8 @@ def export_from_latents(project, clips, master_path, level_match=True,
             fps = int(meta.get("fps") or fps)
             tensors = st_load(os.path.join(project.clips_dir,
                                            basename + ".safetensors"))
-            frames = _frames_from_decode(vae.decode(tensors["video"]))
+            with _inference():
+                frames = _frames_from_decode(vae.decode(tensors["video"]))
             deliver = int(meta.get("frames") or len(frames))
             # the saved latent is the FULL render; delivery keeps the tail
             frames = frames[len(frames) - deliver:]
@@ -318,6 +395,20 @@ def export_from_latents(project, clips, master_path, level_match=True,
                 # the master is the deliverable, so it gets its own
                 # settings rather than inheriting the review clips'
                 vs.options = {"crf": str(int(crf)), "preset": str(preset)}
+                # every stream must exist before the first packet is
+                # muxed: the header goes out with that packet, and a
+                # stream added afterwards never gets a time base, so
+                # its packets cannot be written. The sample rate is known
+                # from the sidecar (or the VAE) without decoding anything.
+                if audio_vae is not None and "audio" in tensors:
+                    sr0 = int(meta.get("sample_rate")
+                              or getattr(audio_vae, "audio_sample_rate",
+                                         44100))
+                    # aac only accepts standard rates; anything unusual
+                    # is resampled linearly to 48k rather than refused
+                    sample_rate = sr0 if sr0 in _AAC_RATES else 48000
+                    aso = out.add_stream("aac", rate=sample_rate)
+                    aso.layout = "stereo"
 
             plan = None
             if level_match and prev_stats is not None:
@@ -344,21 +435,20 @@ def export_from_latents(project, clips, master_path, level_match=True,
                           np.mean(np.stack(tail_rgb), axis=0))
             del frames
 
-            if audio_vae is not None and "audio" in tensors:
-                wave = _waveform_from_decode(
-                    audio_vae.decode(tensors["audio"]))
+            if audio_vae is not None and "audio" in tensors and aso is None:
+                # the first clip had no sound, so the master has no
+                # audio stream and none can be added now (see above)
+                _LOG.warning("h3_suite: %s has sound but the master's "
+                             "first clip did not; its sound is left out",
+                             basename)
+            elif audio_vae is not None and "audio" in tensors:
+                with _inference():
+                    wave = _waveform_from_decode(
+                        audio_vae.decode(tensors["audio"]))
                 sr = int(meta.get("sample_rate")
                          or getattr(audio_vae, "audio_sample_rate", 44100))
                 keep = int(round(deliver / float(fps) * sr))
                 wave = wave[:, max(0, wave.shape[1] - keep):]
-                if aso is None:
-                    # aac only accepts standard rates; resample linearly
-                    # to 48k for anything unusual rather than refusing
-                    _AAC_OK = (8000, 11025, 12000, 16000, 22050, 24000,
-                               32000, 44100, 48000, 64000, 88200, 96000)
-                    sample_rate = sr if sr in _AAC_OK else 48000
-                    aso = out.add_stream("aac", rate=sample_rate)
-                    aso.layout = "stereo"
                 if sample_rate != sr and wave.shape[1] > 1:
                     n = int(round(wave.shape[1] * sample_rate / float(sr)))
                     xi = np.linspace(0, wave.shape[1] - 1, n)
@@ -366,18 +456,25 @@ def export_from_latents(project, clips, master_path, level_match=True,
                                                ch) for ch in wave])
                 if wave.shape[0] == 1:
                     wave = np.repeat(wave, 2, axis=0)
-                af = av.AudioFrame.from_ndarray(
-                    np.clip(wave[:2], -1, 1).astype(np.float32),
-                    format="fltp", layout="stereo")
-                af.sample_rate = sample_rate
-                af.pts = None
-                for pkt in aso.encode(af):
-                    out.mux(pkt)
+                # the encoder wants 1024-sample frames with explicit,
+                # running timestamps (PyAV no longer fills them in), so
+                # the clip's sound joins a buffer that is emitted in
+                # whole frames; the remainder carries over to the next
+                # clip and only the final one may be short
+                wave = np.ascontiguousarray(np.clip(wave[:2], -1, 1),
+                                            dtype=np.float32)
+                abuf = wave if abuf is None else np.concatenate(
+                    (abuf, wave), axis=1)
                 del wave
+                while abuf.shape[1] >= 1024:
+                    seg, abuf = abuf[:, :1024], abuf[:, 1024:]
+                    audio_pts = _encode_audio(seg, audio_pts)
 
         for pkt in vs.encode():
             out.mux(pkt)
         if aso is not None:
+            if abuf is not None and abuf.shape[1]:
+                _encode_audio(abuf, audio_pts)
             for pkt in aso.encode():
                 out.mux(pkt)
     finally:

@@ -1,125 +1,69 @@
 # Changelog
 
-## Unreleased
+## 1.4.0
 
-### ComfyUI 0.34: nothing patched, older cores unchanged
+### New
 
-ComfyUI 0.34.0 places interior keyframe anchors itself and lets a
-keyframe carry audio, placed on the audio grid at the keyframe's
-instant - which is everything this pack's remaining runtime patch was
-for. On such a core the pack now installs NOTHING: the pinned audio is
-emitted as a plain keyframe whose fractional anchor puts the window's
-end exactly where the wrapper used to put it.
+- **Export from latents.** A **from latents** toggle beside the export
+  buttons builds the master by decoding each approved take's saved
+  latent, so every delivered frame is encoded once instead of twice.
+  It finds the VAEs itself, from the graph or from each take's recorded
+  workflow, and the master gets its own quality setting: High, Archive
+  or Quick.
+- **Import footage.** **Import...** opens a picker over ComfyUI's input
+  folder and a filmstrip of the chosen file; drag the span you want and
+  it lands as a normal take, pending review. Footage is conformed to
+  the project's picture size, or sets it when the project is empty. If
+  the shapes differ you get a crop box over the picture with the
+  discarded edges dimmed: drag it to choose what survives, or switch to
+  **Fit** to keep the whole frame inside bars. Drag and drop works too.
+  There is an **H3 Import Source** node for the same thing in a graph.
+- **A project has one picture size, and the Hub knows it.** H3 Project
+  Hub gained `width` and `height` outputs: wire them into the video
+  node and every clip renders at the size the project is already using,
+  read off its first clip. It also gained `width` and `height` input
+  sockets, for a **Resolution Selector** (set its multiple to 32) or
+  anything else that emits two numbers. On an empty project that
+  declares the size up front, which is then what imported footage is
+  conformed to. A size that contradicts a clip already in the chain is
+  refused by name, as is one H3 cannot render. The Hub's summary reads
+  the selector and warns in red before you queue: what it currently
+  produces, what the project is, and the exact ratio and megapixels to
+  set instead.
+- **Panel scaling.** A **Scale** control in the top bar, with separate
+  window and text axes, remembered per browser.
 
-Detection stays behavioural rather than reading a version string, so
-backports and forks land on the right path automatically: the full
-patch on 0.31-0.33.0, the audio-only wrapper on #15439-era masters, and
-nothing at all on 0.34 behaviour. The 0.34 check includes a canary
-borrowed from NikoDemon80's 0.4.0: a fractional NEGATIVE anchor must be
-placed literally, because no stock node produces one - an innocent
-int() cast added upstream later would silently move every pinned sound,
-and the pack refuses the native path if that ever happens.
+### Changed
 
-### Master quality, and cheaper review clips
+- Nothing is patched at all on ComfyUI 0.34, which places interior
+  keyframe anchors and keyframe audio itself. Older cores are
+  unaffected; the pack picks its path by behaviour, not by version
+  number.
+- Saving a long clip no longer crawls. Frames are converted one at a
+  time rather than all at once, so peak memory is a frame instead of a
+  whole clip, and review clips encode about twice as fast.
+- `ffmpeg` is no longer needed on your PATH. Exports are joined with
+  PyAV inside ComfyUI.
+- **Open folder** is now **Copy folder path**. It shows the project's
+  path until you close it, with a Copy button that also works over plain
+  http on a LAN, instead of opening a file manager, which ran on the
+  server rather than on your machine whenever ComfyUI was reached over
+  the network.
+- When a new take lands while the review panel is open, from an import
+  or a finished re-roll, the player now plays into it from just before
+  the join. It used to park paused on the clip before, and pressing play
+  crossed into the previous take under the new take's label.
+- Escape closes only the window on top, not the project panel beneath
+  it as well.
 
-Exporting from latents now asks how to encode the master - High (CRF
-16), Archive (CRF 14, slow) or Quick (CRF 18) - because that file is the
-deliverable and was previously inheriting a default meant for review
-copies.
+### Security
 
-The per-clip videos moved to the "fast" x264 preset at the same CRF,
-roughly halving the wait after each render for a little file size. They
-are review copies; when the master is built from latents nothing in the
-delivered video passes through them at all.
-
-### Long chains export without swapping
-
-The latent export had the same whole-clip conversion the mp4 writer did:
-scaling a decoded clip as a batch, plus a 144-frame copy for level
-matching. Three gigabytes of frames became about ten. It decodes one
-clip at a time, so this was a per-clip ceiling rather than a per-chain
-one, but a long clip would have hit it exactly as saving did.
-
-Frames are now scaled, corrected and encoded individually, and level
-matching runs from per-frame statistics rather than scaled copies of the
-footage - it only ever needed a few hundred numbers.
-
-### Saving long clips no longer crawls
-
-The mp4 writer converted every frame in one batch - clip(), then times
-255, then round(), then astype - which makes four full-size temporaries.
-About 13 GB for a thirteen-second 928x928 clip against 3 GB of actual
-frames. Short clips fit and saved in a second; longer ones pushed the
-machine into swap, and that presents as a ten-minute encode with an idle
-CPU rather than as an out-of-memory error, so the symptom points away
-from the cause.
-
-Frames are now converted one at a time, so peak memory is a frame rather
-than a clip. Project Save and the mp4 writer also log their phase
-timings when a save takes more than two seconds.
-
-### Importing footage
-
-**Import...** in the panel opens a picker over ComfyUI's input folder
-and a filmstrip of the chosen file, with the kept span lit and the
-dropped ends dimmed. The span is dragged, the video scrubs underneath,
-and the length picker offers only lengths H3 can render - so the trim
-is chosen by looking at it rather than described afterwards. It opens
-on the longest valid window anchored at the end, since imported footage
-usually runs into a chain.
-
-The Project Hub node gained optional `vae` and `audio_vae` inputs. They
-render nothing; the panel reads the graph to see which loaders feed them
-and encodes imported footage with those, so importing works on an empty
-project in a fresh session with nothing queued. Exporting from latents
-uses the same source.
-
-Files arrive by drag and drop onto the window, or through a normal file
-picker; both copy into ComfyUI's input folder, which is also still
-browsed for anything already there. Anything not at 24 fps is remapped
-by picking frames rather than blending them. Audio comes along when the file has one. The result is
-written as a normal take, pending review.
-
-There is also an **H3 Import Source** node for graph use, with the same
-conforming and a written report.
-
-### Export from latents
-
-A **from latents** toggle beside the export buttons. The master is
-assembled by decoding each approved take's saved latent and encoding
-once, instead of joining the clip videos: every delivered frame meets
-H.264 exactly once, and level matching is applied in float before that
-encode, so corrected joins stop costing a second compression
-generation.
-
-It borrows the running graph's VAEs when a clip has been queued this
-session, and otherwise loads the ones the takes were rendered with,
-named in each take's recorded workflow. Nothing to wire, and no
-requirement to generate something before exporting. Each candidate is
-classified by what it loads as rather than by its filename, so an
-unrelated VAE is refused instead of quietly decoding to garbage.
-
-A missing latent is named and refused before a single frame is written -
-a master that silently swapped one clip to its video would misrepresent
-itself.
-
-### Panel scaling
-
-A **Scale** control in the panel's top bar, with independent window and
-text axes. Window resizes the box; text changes font size only, so the
-layout rewraps rather than showing less of itself - the two answer
-different questions ("I want more room" against "I can't read this") and
-a single zoom can only satisfy one.
-
-Set-then-Apply rather than live, because the control sits inside the
-window it resizes and a live update moves the slider out from under the
-pointer. Apply highlights when there is something to apply; Reset returns
-both to 100%. Scaled boxes stay clamped to the viewport, so a large
-setting can never push the control that undoes it off-screen, and the
-popover pins itself to 100% so it stays legible at every setting.
-
-Stored per browser in localStorage, not in the workflow: scale belongs to
-a monitor, not to a project.
+Hardening for Comfy Registry policy v0.2. Every route that changes
+something needs a per-session token and passes same-origin and
+content-type checks, node widgets that become file paths are contained
+to ComfyUI's output folder, no request starts an external program, and
+no code is built from strings. `SECURITY.md` has the detail, surface by
+surface.
 
 ## 1.3.0
 

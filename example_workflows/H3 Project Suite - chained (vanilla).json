@@ -2,7 +2,7 @@
   "id": "e3f2b845-8f2c-4b5a-9caf-eac1029d3e7e",
   "revision": 0,
   "last_node_id": 142,
-  "last_link_id": 269,
+  "last_link_id": 273,
   "nodes": [
     {
       "id": 114,
@@ -250,7 +250,8 @@
           "type": "VAE",
           "links": [
             230,
-            242
+            242,
+            270
           ]
         }
       ],
@@ -293,7 +294,8 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            229
+            229,
+            271
           ]
         }
       ],
@@ -1018,7 +1020,54 @@
       "flags": {},
       "order": 12,
       "mode": 0,
-      "inputs": [],
+      "inputs": [
+        {
+          "link": 270,
+          "localized_name": "vae",
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE"
+        },
+        {
+          "link": 271,
+          "localized_name": "audio_vae",
+          "name": "audio_vae",
+          "shape": 7,
+          "type": "VAE"
+        },
+        {
+          "link": 272,
+          "localized_name": "width",
+          "name": "width",
+          "shape": 7,
+          "type": "INT"
+        },
+        {
+          "link": 273,
+          "localized_name": "height",
+          "name": "height",
+          "shape": 7,
+          "type": "INT"
+        },
+        {
+          "link": null,
+          "localized_name": "project_name",
+          "name": "project_name",
+          "type": "STRING",
+          "widget": {
+            "name": "project_name"
+          }
+        },
+        {
+          "link": null,
+          "localized_name": "create_if_missing",
+          "name": "create_if_missing",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "create_if_missing"
+          }
+        }
+      ],
       "outputs": [
         {
           "name": "project",
@@ -1049,6 +1098,22 @@
           "type": "STRING",
           "slot_index": 3,
           "links": []
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "slot_index": 4,
+          "links": [
+            246
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "slot_index": 5,
+          "links": [
+            247
+          ]
         }
       ],
       "properties": {
@@ -1352,14 +1417,14 @@
           "name": "width",
           "type": "INT",
           "links": [
-            246
+            272
           ]
         },
         {
           "name": "height",
           "type": "INT",
           "links": [
-            247
+            273
           ]
         }
       ],
@@ -1469,16 +1534,16 @@
     ],
     [
       246,
-      115,
-      0,
+      138,
+      4,
       133,
       4,
       "INT"
     ],
     [
       247,
-      115,
-      1,
+      138,
+      5,
       133,
       5,
       "INT"
@@ -1642,6 +1707,38 @@
       127,
       4,
       "LATENT"
+    ],
+    [
+      270,
+      121,
+      0,
+      138,
+      0,
+      "VAE"
+    ],
+    [
+      271,
+      122,
+      0,
+      138,
+      1,
+      "VAE"
+    ],
+    [
+      272,
+      115,
+      0,
+      138,
+      2,
+      "INT"
+    ],
+    [
+      273,
+      115,
+      1,
+      138,
+      3,
+      "INT"
     ]
   ],
   "groups": [

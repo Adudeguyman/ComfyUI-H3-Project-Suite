@@ -50,7 +50,7 @@ The idea is simple — create and automate your video extensions without getting
 2. Restart ComfyUI.
 3. Hard-refresh your browser (Ctrl+Shift+R).
 
-You need `ffmpeg` on your system for the export button. Levelling a join and measuring drift also need `av` and `numpy`, which most ComfyUI installs already have — if yours doesn't, the rest of the pack works fine and only that one feature reports a missing dependency.
+Exporting a master, levelling a join and measuring drift need `av` and `numpy`, which ComfyUI itself already depends on — nothing else, and no `ffmpeg` on your PATH. The panel talks to the server over a handful of `/h3_suite/` routes; every one that changes anything is guarded by a per-session token and a same-origin check, described in [SECURITY.md](SECURITY.md).
 
 **Important:** if you have the original *ComfyUI-H3-Motion-Context* pack installed, remove or disable it. The two can't run at the same time — this one detects the conflict and refuses to run rather than produce a bad render.
 
@@ -135,19 +135,19 @@ Extra takes add up: each one is a full video plus the data the next clip needs. 
 
 ---
 
-## Starting from footage you already have
+## Importing clips to extend
 
-Press **Import…** in the panel to bring in outside footage — a live-action plate, a clip from another model, an exported master you want to continue — as the chain's first clip.
+One wiring step first: connect your H3 video and audio VAEs to the **Project Hub** node's `vae` and `audio_vae` inputs. They aren't used to render anything — the panel reads which loaders they come from, so importing knows which models to encode with without anything having to run. Wire your **Resolution Selector** into the Hub's `width` and `height` as well, so the project has a picture size before its first clip arrives.
 
-H3 runs at 24fps and can only render certain lengths (5, 22, 39, 56 … frames), so importing always means dropping a few frames. **You choose which ones, by looking at them.** The import window shows a filmstrip of the whole source with your kept span lit and the dropped ends dimmed. Drag the span, scrub the video underneath, press Play window to watch just what you're keeping. The length picker only offers lengths H3 can actually render, so an invalid window can't be chosen.
+Press **Import…** in the panel to bring in outside footage — a live-action plate, a clip from another model, an exported master you want to continue — as the chain's first clip. Drop a video anywhere on the import window, or press **Choose…** and pick one from your computer. It's copied into ComfyUI's input folder and selected; anything already in there shows up in the list too.
 
-One wiring step first: connect your H3 video and audio VAEs to the **Project Hub** node's `vae` and `audio_vae` inputs. They aren't used to render anything — the panel reads the loaders they come from so importing knows which models to encode with, without anything having to run.
+Because of how the MiniMax H3 VAE encoder works, you may lose some frames from importing a video. H3 renders at 24 fps and only in certain lengths, so a clip that isn't already one of those lengths is trimmed to the nearest one that is — never more than a fraction of a second, and only ever from the ends. Footage at another frame rate is converted to 24 fps first by picking real frames, never by blending them.
 
-Getting a video in takes no file management: drop one anywhere on the import window, or press **Choose…** and pick it from your computer. It's copied into ComfyUI's input folder and selected. Anything already in there shows up in the list too.
+You choose which frames to keep by looking at them. The import window shows a filmstrip of the whole source with the kept span lit and the dropped ends dimmed. Drag the span along the footage, scrub the video underneath, and press **Play window** to watch only what you're keeping. The **length** picker offers just the lengths H3 can render, so an invalid window can't be chosen. It starts on the longest valid window at the *end* of the footage, since an imported clip usually leads into a chain.
 
-It opens with the longest valid window anchored at the *end* of the footage, since imported clips usually run into a chain rather than out of one.
+If the footage isn't the project's picture size, a crop box appears over the preview showing what survives. Drag it to choose, or switch to **Fit** to keep the whole frame with bars instead.
 
-Anything not already at 24fps is remapped by picking frames, never by blending — no invented pixels. Audio comes along when the file has it. The imported clip lands as clip 1, pending review, so you watch it in the player like any other take before approving.
+Audio comes along when the file has it. The imported clip lands as clip 1, pending review, so you watch it in the player like any other take before approving.
 
 There's also an **H3 Import Source** node for doing this in a graph, with the same conforming and a written report instead of a filmstrip.
 
@@ -155,13 +155,11 @@ There's also an **H3 Import Source** node for doing this in a graph, with the sa
 
 ## Exporting from latents
 
-Next to the export buttons is a **from latents** toggle. Off, the master is joined from the clip videos — instant, and byte-identical to them. On, the exporter decodes each approved take's saved latent fresh and encodes the master in one pass.
+Next to the export buttons is a **from latents** toggle. Toggled off, the generated mp4 clips are encoded quickly and directly. Toggled on, the exporter decodes all of the clip's latent files into one saved mp4, as if it were generated in one pass.
 
-What that buys: every frame in the master meets H.264 exactly once, with settings chosen at export rather than at save; and level matching happens in float *before* that encode, so a corrected join no longer costs a second compression generation. The per-clip videos become what they always were underneath — review copies.
+Exporting with **from latents** on can take a long time to process, however with level matching before anything is written this can provide a cleaner, more seamless output. With it off it is very quick, but may have more noticeable seams or color shifts, so that is better for an overall preview as you go for a quick progress check.
 
-What it costs: a chain's worth of VAE decodes, so a minute rather than a second. It finds the VAEs the same way importing does — from the loaders wired to the Project Hub, from a take's recorded workflow, or from whatever the graph last used. If a take's latent file is missing, the export names it and stops rather than quietly substituting the video.
-
-With it on, the export dialog also offers a **quality** for the master: High (CRF 16) by default, Archive (CRF 14, slower) when it's the finished thing, or Quick (CRF 18) for a look. The review clips are encoded separately and aren't affected — they're deliberately cheaper now, since the master no longer comes from them.
+There is a **quality** toggle for exporting the full chain in **from latents** mode: High (CRF 16) by default, Archive (CRF 14, slower) when it's the finished thing, or Quick (CRF 18) for a look. The review clips are encoded separately and aren't affected — they're deliberately cheaper now, since the master no longer comes from them.
 
 Both settings are remembered in your browser.
 

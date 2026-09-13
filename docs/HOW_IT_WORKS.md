@@ -307,7 +307,8 @@ Both should print their checks and finish with a pass line.
 | `nodes.py` | The chain nodes: H3 Context, Trim, and the low-level latent Save/Load pair. |
 | `project.py` | The project model: manifest schema, chain transitions, take retention, branching, storage accounting. No ComfyUI dependency. |
 | `project_nodes.py` | H3 Project Hub and H3 Project Save - the graph's front and back ends. |
-| `routes.py` | The `/h3_suite/` HTTP endpoints the review panel talks to. |
+| `routes.py` | The `/h3_suite/` HTTP endpoints the review panel talks to. Every one that changes state sits behind the session token and same-origin guard described in `SECURITY.md`. |
+| `concat.py` | Joins clip mp4s into a master with PyAV: stream copy when nothing was touched, one re-encode when a join was level-matched. |
 | `web/h3_project_panel.js` | The review panel and branch modal. |
 | `tests/seam_probe.py` | Measures whether a join's audio is a true continuation, a sound-alike, or drifting. |
 | `tests/` | Standalone tests; run without ComfyUI (numpy only, except the mp4 probe which needs PyAV and skips if absent). |
