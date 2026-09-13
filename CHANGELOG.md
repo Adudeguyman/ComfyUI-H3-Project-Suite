@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1
+
+- **Download an export.** An **Exports** dropdown beside the export
+  buttons lists every master the project has written, newest first,
+  with a **Download** button. For anyone whose ComfyUI runs somewhere
+  the output folder cannot be reached, this is how the file gets out.
+- Opening the project panel no longer starts playing on its own when a
+  take landed while it was closed.
+
 ## 1.4.0
 
 ### New

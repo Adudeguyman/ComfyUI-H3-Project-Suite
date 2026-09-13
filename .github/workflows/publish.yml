@@ -23,15 +23,11 @@ jobs:
     # it. Versions are immutable: set it BEFORE the push that publishes.
     env:
       COMFY_NODE_CHANGELOG: |
-        Export a master from the saved latents, so every delivered frame
-        is encoded once. Import existing footage by picking the window on
-        a filmstrip. Nothing is patched at all on ComfyUI 0.34. Panel
-        scaling, master quality settings, faster and lighter clip saves.
-        Security hardening for registry policy v0.2: a session token plus
-        same-origin and content-type checks on every state-changing
-        route, widget paths contained to the output folder, no external
-        program started by a request, no code built from strings. See
-        SECURITY.md and CHANGELOG.md.
+        Download an export: an Exports dropdown beside the export buttons
+        lists every master the project has written, with a Download
+        button, for installs where the output folder cannot be reached.
+        Opening the project panel no longer starts playing on its own.
+        See CHANGELOG.md.
     steps:
       - name: Check out code
         uses: actions/checkout@v4

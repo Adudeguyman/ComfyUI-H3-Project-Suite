@@ -153,6 +153,37 @@ async def run():
             checks += 1
         print("%d GET routes: no token needed" % len(gets))
 
+        # -- exported masters: listed, downloadable, and nothing else ----
+        root = Project(_OUT, "GuardProbe").root
+        with open(os.path.join(root, "GuardProbe_master.mp4"), "wb") as fh:
+            fh.write(b"MASTER-BYTES")
+        with open(os.path.join(root, "GuardProbe_preview.mp4"), "wb") as fh:
+            fh.write(b"PREVIEW")
+        with open(os.path.join(root, ".hidden.mp4"), "wb") as fh:
+            fh.write(b"tmp")
+        os.symlink("/etc/hostname", os.path.join(root, "escape.mp4"))
+        r = await client.get("/h3_suite/project/exports",
+                             params={"name": "GuardProbe"})
+        listed = [e["file"] for e in (await r.json())["exports"]]
+        assert set(listed) == {"GuardProbe_master.mp4",
+                               "GuardProbe_preview.mp4"}, listed
+        r = await client.get("/h3_suite/project/master",
+                             params={"name": "GuardProbe",
+                                     "file": "GuardProbe_master.mp4"})
+        assert r.status == 200 and await r.read() == b"MASTER-BYTES"
+        assert r.headers["Content-Disposition"].startswith("attachment"), \
+            r.headers.get("Content-Disposition")
+        for bad in ("../project.json", "project.json", ".hidden.mp4",
+                    "escape.mp4", "clips/clip_001_take1.mp4",
+                    "GuardProbe_master.mp4/../project.json"):
+            r = await client.get("/h3_suite/project/master",
+                                 params={"name": "GuardProbe", "file": bad})
+            assert r.status == 404, (bad, r.status)
+            checks += 1
+        print("exports: two masters listed, the master downloads as an "
+              "attachment, and the manifest, a dotfile, a symlink out, a "
+              "clip and a traversal are all refused")
+
         # -- the guard must be what the suite measures ----------------
         orig = routes_mod.token_ok
         routes_mod.token_ok = lambda headers: True

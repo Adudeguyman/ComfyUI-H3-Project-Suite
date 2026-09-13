@@ -28,6 +28,7 @@ import this module without it and get a no-op.
 import hmac
 import logging
 import os
+import re
 import secrets
 
 _LOG = logging.getLogger("h3_suite")
@@ -39,6 +40,10 @@ TOKEN_HEADER = "X-H3Suite-Token"
 
 # the only files the import side will list, probe, serve or decode
 _VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
+
+# an exported master's filename: what _safe_export_name can produce, and
+# nothing starting with a dot, so a temp file never lists or serves
+_EXPORT_RE = re.compile(r"^[A-Za-z0-9 _-][A-Za-z0-9 ._-]*\.mp4$")
 
 
 def _host_port(value):
@@ -406,6 +411,63 @@ def _register():
             n += 1
         return "%s_%03d.mp4" % (base, n)
 
+    def _exports(p):
+        """Every exported master in the project root, newest first.
+
+        Masters live beside the manifest, never in clips/, and their
+        names come from _safe_export_name, so the same character set is
+        what qualifies a file here.
+        """
+        out = []
+        root = os.path.realpath(p.root)
+        for f in os.listdir(p.root):
+            if not _EXPORT_RE.match(f):
+                continue
+            full = os.path.join(p.root, f)
+            # the same test the download applies: a symlink pointing out
+            # of the project is neither listed nor served
+            if os.path.dirname(os.path.realpath(full)) != root \
+                    or not os.path.isfile(full):
+                continue
+            st = os.stat(full)
+            out.append({"file": f, "size": st.st_size, "mtime": st.st_mtime,
+                        "preview": "_preview" in f})
+        out.sort(key=lambda e: e["mtime"], reverse=True)
+        return out
+
+    @routes.get("/h3_suite/project/exports")
+    async def exports(request):
+        try:
+            p = _project(request)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        return web.json_response({"exports": _exports(p)})
+
+    @routes.get("/h3_suite/project/master")
+    async def master(request):
+        """One exported master, as a download.
+
+        For anyone whose ComfyUI runs somewhere they cannot browse the
+        output folder: the file travels over HTTP or not at all. Read
+        only; the name must be one _safe_export_name could have written
+        and must resolve inside the project root - not clips/, not a
+        symlink out.
+        """
+        try:
+            p = _project(request)
+        except ProjectError as exc:
+            return web.json_response({"error": str(exc)}, status=404)
+        fname = os.path.basename(request.rel_url.query.get("file", ""))
+        if not _EXPORT_RE.match(fname):
+            return web.json_response({"error": "no such export"}, status=404)
+        real = os.path.realpath(os.path.join(p.root, fname))
+        if os.path.dirname(real) != os.path.realpath(p.root) \
+                or not os.path.isfile(real):
+            return web.json_response({"error": "no such export"}, status=404)
+        return web.FileResponse(real, headers={
+            "Content-Disposition": 'attachment; filename="%s"' % fname,
+            "Cache-Control": "no-store"})
+
     @routes.get("/h3_suite/project/export_name")
     async def export_name(request):
         try:
@@ -584,6 +646,7 @@ def _register():
                 shutil.rmtree(tmp_dir, ignore_errors=True)
         out = _state(p)
         out["master"] = master
+        out["exported"] = fname
         out["preview"] = bool(preview)
         out["clip_count"] = len(clips)
         out["level_matched"] = matched

@@ -60,7 +60,8 @@ one), so no `GET` under `/h3_suite/` creates, writes, moves or deletes
 anything. Project lookups open with `create=False`; the storage report
 and the take cleanup preview only read; the level-match preview and the
 drift report only decode; `GET /h3_suite/project/folder` reports a path
-and does not open it. There is no `os.makedirs` reachable from a `GET`.
+and does not open it; the exports listing and the master download only
+read. There is no `os.makedirs` reachable from a `GET`.
 
 ## No programs are started by a request
 
@@ -86,6 +87,7 @@ above decides *who* may fire it. Both hold on every write.
 | Import source (`rel` in list/probe/file/import) | ComfyUI's input folder | `_safe_source` (realpath + commonpath, and only a video extension) |
 | Upload destination | `input/h3_imports/` | basename only, extension allow-list, written to a temp name and renamed into place |
 | Clip video served to the player | the project folder | realpath + commonpath in the video route |
+| Exported master listed or downloaded (`file` in exports/master) | the project root, not `clips/` | basename only, must match `_EXPORT_RE` (what the export can write, never a dotfile), realpath's parent must be the project root, so a symlink out is neither listed nor served |
 | VAE names sent by the panel for a latent export | ComfyUI's `vae` folder | must appear in `folder_paths.get_filename_list("vae")` before `get_full_path` is consulted |
 | `latent_path` widget on H3 Context Load Latent | ComfyUI's output folder | `_inside_output` in `nodes.py`; an absolute path elsewhere raises, it is not remapped |
 | `filename_prefix` widget on H3 Context Save Latent | ComfyUI's output folder | `_contain_prefix` in `nodes.py`: a whole `..` segment raises, drive letters and UNC prefixes are stripped, then realpath + commonpath; core's `get_save_image_path` checks again |

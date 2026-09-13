@@ -163,6 +163,8 @@ There is a **quality** toggle for exporting the full chain in **from latents** m
 
 Both settings are remembered in your browser.
 
+Every master the project has written appears in an **exports** dropdown beside the export buttons, newest first, with a **Download** button. That is how to get a master out when ComfyUI runs somewhere you can't browse the output folder — a hosted service, a remote box — since the file otherwise only exists on the server's disk.
+
 ---
 
 ## On a big monitor

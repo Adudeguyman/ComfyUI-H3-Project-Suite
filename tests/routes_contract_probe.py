@@ -49,8 +49,9 @@ class _Web:
                                      headers=headers or {})
 
     class FileResponse:
-        def __init__(self, path):
+        def __init__(self, path, headers=None):
             self.path = path
+            self.headers = headers or {}
 
 
 aio = types.ModuleType("aiohttp")

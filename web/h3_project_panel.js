@@ -59,6 +59,8 @@ const CSS = `
   padding:30px;white-space:pre-wrap;}
 .h3p-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .h3p-exportrow{display:flex;align-items:center;min-height:30px;}
+a.h3p-btn{text-decoration:none;display:inline-flex;align-items:center;}
+a.h3p-btn:not([href]){opacity:.5;pointer-events:none;}
 .h3p-inline{display:flex;gap:8px;align-items:center;flex:1;}
 .h3p-modes{display:flex;gap:2px;background:#12151b;border:1px solid #2a2f3a;
   border-radius:7px;padding:2px;}
@@ -1643,6 +1645,20 @@ class ProjectModal extends ChainTimeline {
       if (e.key === "Escape") this.closeExportNaming();
       e.stopPropagation();
     };
+    // every master this project has written, newest first, and a way to
+    // get one out over HTTP - the only way out when ComfyUI runs
+    // somewhere the output folder cannot be browsed. Hidden until the
+    // project has an export.
+    this.exports = [];
+    this.exportsSel = el("select", { class: "h3p-select",
+      title: "masters and previews this project has written",
+      onchange: () => this.paintExports() });
+    this.downloadLink = el("a", { class: "h3p-btn", text: "Download",
+      title: "save the selected export through the browser" });
+    this.exportsWrap = el("span", { class: "h3p-inline",
+                                    style: "display:none" },
+      el("span", { class: "h3p-takelabel", text: "exports" }),
+      this.exportsSel, this.downloadLink);
     // one fixed row: buttons by default, the name field in their place
     // while naming. Same height either way, so nothing below it moves.
     this.latentExportBox = el("input", {
@@ -1667,7 +1683,8 @@ class ProjectModal extends ChainTimeline {
                             "review \u2014 judge the join without the " +
                             "player's boundary stutter",
                      onclick: () => this.exportMaster(true) }),
-      this.latentExportWrap);
+      this.latentExportWrap,
+      this.exportsWrap);
     this.qualitySel = el("select", {
       title: "how the master itself is encoded. The review clips are " +
              "unaffected.",
@@ -1818,6 +1835,11 @@ class ProjectModal extends ChainTimeline {
     api.removeEventListener("executed", this._onExec);
     document.removeEventListener("visibilitychange", this._onFocus);
     window.removeEventListener("focus", this._onFocus);
+    // the "a new take just landed, play into it" marker is only meaningful
+    // while the panel is open and watching. This object outlives the
+    // window, so without this a take that arrived while it was closed
+    // would count as new on the next open and start playing unasked.
+    this._timelinePending = null;
     this.node._h3RefreshSummary?.();
   }
 
@@ -2174,6 +2196,43 @@ class ProjectModal extends ChainTimeline {
     this.exportBtns.style.display = "flex";
   }
 
+  async loadExports() {
+    try {
+      const r = await api.fetchApi(
+        `/h3_suite/project/exports?name=${encodeURIComponent(this.name())}`);
+      const d = await r.json();
+      this.exports = (r.ok && !d.error && Array.isArray(d.exports))
+        ? d.exports : [];
+    } catch (e) { this.exports = []; }
+  }
+
+  /** Fill the exports dropdown and point Download at the chosen file.
+   *  `prefer` (a filename) wins, else the current choice if it still
+   *  exists, else the newest. */
+  paintExports(prefer) {
+    const list = this.exports || [];
+    if (!list.length) {
+      this.exportsWrap.style.display = "none";
+      this.downloadLink.removeAttribute("href");
+      return;
+    }
+    const current = this.exportsSel.value;
+    const want = prefer || (list.some((e) => e.file === current) ? current
+                                                                 : list[0].file);
+    this.exportsSel.innerHTML = "";
+    for (const e of list) {
+      const mb = (e.size / 1048576).toFixed(1);
+      this.exportsSel.append(el("option", { value: e.file,
+        text: `${e.file} · ${mb} MB${e.preview ? " · preview" : ""}` }));
+    }
+    this.exportsSel.value = want;
+    const p = `/h3_suite/project/master?name=${encodeURIComponent(this.name())}` +
+      `&file=${encodeURIComponent(this.exportsSel.value)}`;
+    this.downloadLink.href = api.apiURL ? api.apiURL(p) : p;
+    this.downloadLink.setAttribute("download", this.exportsSel.value);
+    this.exportsWrap.style.display = "inline-flex";
+  }
+
   async doExport() {
     const filename = this.exportInput.value.trim();
     if (!filename) return;
@@ -2197,6 +2256,10 @@ class ProjectModal extends ChainTimeline {
       toast(`${what} written${out.from_latents ? " from latents" : ""} ` +
             `(${n} clips${lm ? `, ${lm} join` +
             `${lm === 1 ? "" : "s"} level-matched` : ""}): ${name}`);
+      // the new file goes straight into the dropdown, selected, so
+      // Download is one click away without a refresh
+      await this.loadExports();
+      this.paintExports(out.exported);
     } catch (e) { toast(e.message, true); }
   }
 
@@ -2427,9 +2490,11 @@ class ProjectModal extends ChainTimeline {
           const sd = await r.json();
           this.storage = sd.error ? null : sd;
         } catch (e) { this.storage = null; }
+        await this.loadExports();
       } catch (e) {
         this.state = { missing: String(e.message || e) };
         this.storage = null;
+        this.exports = [];
       }
     }
     this.render();
@@ -2571,6 +2636,7 @@ class ProjectModal extends ChainTimeline {
     const name = this.name();
     const approved = s.clips.filter((c) => c.status === "approved");
     const tail = approved.length ? approved[approved.length - 1] : null;
+    this.paintExports();
 
     this.btnTimeline.className = this.mode === "timeline" ? "on" : "";
     this.btnClip.className = this.mode === "clip" ? "on" : "";
