@@ -24,6 +24,22 @@ The idea is simple — create and automate your video extensions without getting
 
 ---
 
+## What's new
+
+**1.4.1**
+- **Download an export.** Every master the project has written now shows up in a dropdown beside the export buttons, with a Download button. Handy when your ComfyUI runs somewhere you can't get at the output folder.
+
+**1.4.0**
+- **Import your own footage.** Bring in a live-action plate, a clip from another model, or an old master, pick the part you want on a filmstrip, and it lands as a clip in the chain.
+- **Export from latents.** A toggle that rebuilds the master from the saved latents, so every frame is encoded once and joins come out cleaner. Slower, but it's the one to use for the finished thing.
+- **One picture size per project.** The Project Hub now takes and gives out width and height, so a whole chain renders at the same size and imported footage is fitted to it. If a Resolution Selector disagrees with the project, the Hub tells you in red before you queue.
+- **Scale the panel** to your screen, with separate window and text sizes.
+- **Security hardening** for the Comfy Registry's review policy. Nothing changes in how you use the pack; the details are in [SECURITY.md](SECURITY.md).
+
+See [CHANGELOG.md](CHANGELOG.md) for the full history.
+
+---
+
 ## What you get
 
 **Clips that continue instead of restarting.** The next clip is handed roughly a second of what came before rather than one frozen frame, so motion carries its direction and speed through a join, and sound carries on — the same music playing through, the same voice mid-sentence — rather than a soundalike starting up. How well any individual join lands still depends on your prompt and the model's mood, but it has something real to continue from.
