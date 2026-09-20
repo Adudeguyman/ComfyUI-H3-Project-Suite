@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.2
 
 - **Hold framing** on H3 Context, off by default and experimental. Pins
   the carried-over window's last step once more at the first frame past
