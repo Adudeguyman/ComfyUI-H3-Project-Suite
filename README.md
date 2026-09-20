@@ -27,7 +27,7 @@ The idea is simple — create and automate your video extensions without getting
 ## What's new
 
 **1.4.2**
-- **Hold framing.** An experimental toggle on H3 Context for a shot that holds through the overlap and then jumps to a new angle. Off by default; it can ghost slightly at the seam, so fix the prompt first.
+- **Hold framing.** An experimental toggle on H3 Context that keeps the previous shot's framing going after the overlap ends, instead of letting the model cut to a new angle at that point. Off by default; it can leave a slight ghost at the seam, so try fixing the prompt first.
 - Click the status box on the Hub node to open the project panel.
 
 **1.4.1**

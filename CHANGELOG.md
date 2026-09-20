@@ -2,11 +2,12 @@
 
 ## 1.4.2
 
-- **Hold framing** on H3 Context, off by default and experimental. Pins
-  the carried-over window's last step once more at the first frame past
-  the window, so the model has to carry the framing through instead of
-  cutting to a new shot the moment the overlap ends. May leave a
-  split-second ghost at that frame; try it on a join that jumps.
+- **Hold framing** on H3 Context, off by default and experimental. Keeps
+  the previous shot's framing going after the carried-over frames end,
+  instead of letting the model cut to a new angle the moment they run
+  out, by holding the last carried frame one step longer. May leave a
+  slight ghost at the seam; try it on a join that jumps, and try fixing
+  the prompt first.
 - The status box on the Hub node opens the project panel when clicked,
   the same as the button above it. A drag on it still moves the node.
 
