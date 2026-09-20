@@ -334,6 +334,22 @@ class H3Context:
                                "ComfyUI this grades the pixels only; with "
                                "upstream PR #15375 applied it also grades "
                                "how the held rows are conditioned."}),
+                "hold_framing": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "EXPERIMENTAL. Stops the shot from jumping to "
+                               "a new framing the moment the carried-over "
+                               "frames run out. The overlap tells the model "
+                               "what the first second looks like, but not "
+                               "that the shot has to keep going afterwards, "
+                               "so it can cut away right there. This holds "
+                               "the framing one step longer so it carries "
+                               "through, but may also cause a slight ghosting "
+                               "effect. Try it on a join that jumps; if a "
+                               "continuous shot jumps to a new angle right "
+                               "after the overlapped frames this may help, "
+                               "but try fixing the prompt first before "
+                               "accepting possible ghosting at the seam that "
+                               "can be caused by this feature."}),
             },
             "optional": {
                 "vae": ("VAE", {
@@ -542,7 +558,7 @@ class H3Context:
               audio_mode="timeline", video_source="frames", vae=None,
               context_frames=None, context_latent=None, audio_vae=None,
               context_audio=None, enabled=True, seed_head=False,
-              head_hold=1.0):
+              head_hold=1.0, hold_framing=False):
         try:
             from .export_latents import register_vaes
             register_vaes(vae, audio_vae)
@@ -599,6 +615,21 @@ class H3Context:
                 "resolved_frame_index": 0,
                 MC_KEY: p,
                 "latent": blk,
+            })
+        # A pinned window anchors content AT frames 0..span-1 and says
+        # nothing about frame span, so a clip that reproduces the tail and
+        # then cuts to a new framing satisfies it perfectly - the jump that
+        # shows up the moment the overlap ends. Re-pinning the window's own
+        # last step at the first unpinned frame adds a second anchor that
+        # can only be met by carrying the framing across. One step, not a
+        # second window; the rest of the clip stays the prompt's.
+        anchor_at = None
+        if hold_framing:
+            anchor_at = span if anchor_mode == "head" else 0
+            keyframes.append({
+                "resolved_frame_index": 0,
+                MC_KEY: anchor_at,
+                "latent": blocks[-1],
             })
 
         values = {
@@ -692,9 +723,13 @@ class H3Context:
 
         trim = span if anchor_mode == "head" else 0
         _LOG.info("h3_suite: %s/%s, %d frames -> %d cond blocks at "
-                  "indices %d..%d, %d frame clip at %dx%d, trim %d, audio %s",
+                  "indices %d..%d%s, %d frame clip at %dx%d, trim %d, "
+                  "audio %s",
                   encode_mode, anchor_mode, n, len(blocks),
-                  indices[0], indices[-1], frame_count, width, height, trim,
+                  indices[0], indices[-1],
+                  (" + framing anchor at %d" % anchor_at)
+                  if anchor_at is not None else "",
+                  frame_count, width, height, trim,
                   ("%d frames -> %d latent steps (%.3fs) from %s, %s"
                    % (a_frames, ref_audio_t, ref_audio_t / AUDIO_HZ, audio_src,
                       "on the timeline ending at frame %.3f, placed by %s"

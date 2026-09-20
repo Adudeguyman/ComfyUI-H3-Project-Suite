@@ -228,7 +228,8 @@ table.h3p-drift td.n{font-family:ui-monospace,monospace;text-align:right;}
 .h3p-toast.bad{border-color:#7a3a3a;color:#e8b0b0;}
 .h3p-summary{background:#12151b;border:1px solid #2e3440;border-radius:7px;
   padding:7px 10px;font-size:calc(11px * var(--h3p-fs, 1));line-height:1.55;color:#9aa3b2;
-  font-family:system-ui,sans-serif;overflow:hidden;}
+  font-family:system-ui,sans-serif;overflow:hidden;cursor:pointer;}
+.h3p-summary:hover{border-color:#5b8cff;background:#151a24;}
 .h3p-summary b{color:#d7dbe2;font-weight:600;}
 .h3p-summary .pend{color:#e0a94c;} .h3p-summary .ok{color:#7ec87e;}
 .h3p-summary .nx{font-family:ui-monospace,monospace;font-size:calc(10px * var(--h3p-fs, 1));color:#6f86b8;}
@@ -2921,7 +2922,21 @@ app.registerExtension({
                      () => modal.open());
 
       const summary = el("div", { class: "h3p-summary",
-                                  text: "\u2026" });
+                                  text: "\u2026",
+                                  title: "open the project panel" });
+      // the status box is the thing you look at, so it is also the thing
+      // you click. A press that turns into a drag is the canvas moving
+      // the node, not a request to open it.
+      let press = null;
+      summary.addEventListener("mousedown", (e) => {
+        if (e.button === 0) press = [e.clientX, e.clientY];
+      });
+      summary.addEventListener("mouseup", (e) => {
+        if (!press || e.button !== 0) return;
+        const moved = Math.hypot(e.clientX - press[0], e.clientY - press[1]);
+        press = null;
+        if (moved < 4) modal.open();
+      });
       this.addDOMWidget("h3p_summary", "div", summary,
                         { serialize: false, getMinHeight: () => 64 });
 

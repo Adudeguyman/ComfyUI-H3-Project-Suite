@@ -243,6 +243,8 @@ This needs the sampler's latent to come from **H3 Context's `latent` output** ra
 
 If a join shows a texture or quality change about a second in, that's the point where the held frames end. **Head hold (1.0)** controls how firmly they're held; try 0.85, or switch seed head off to compare.
 
+**Hold framing (off)** — experimental. Stops the shot from jumping to a new framing the moment the carried-over frames run out. The overlap tells the model what the first second looks like, but not that the shot has to keep going afterwards, so it can cut away right there. This holds the framing one step longer so it carries through, but may also cause a slight ghosting effect. Try it on a join that jumps; if a continuous shot jumps to a new angle right after the overlapped frames this may help, but try fixing the prompt first before accepting possible ghosting at the seam that can be caused by this feature.
+
 On a ComfyUI new enough to place keyframe anchors itself, seed head runs at **full strength**: the pack carries the mechanism from upstream pull request [#15375](https://github.com/Comfy-Org/ComfyUI/pull/15375) (not merged yet) as a runtime layer, vendored from the [MultiRef fork](https://github.com/seitanism/ComfyUI-H3-Motion-Context-MultiRef). Held frames read as *given* content from the first sampling step, and head hold grades the conditioning itself, not just the picture. Nothing on disk changes: the layer loads into memory when seed head first runs, a restart reverts it, and if ComfyUI ever ships this natively the pack detects that and steps aside. The log says which form you got. On older ComfyUI builds seed head keeps its simpler form — the held frames land exactly, they just steer the model more weakly.
 
 ---

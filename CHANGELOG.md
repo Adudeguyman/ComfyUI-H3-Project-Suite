@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Hold framing** on H3 Context, off by default and experimental. Pins
+  the carried-over window's last step once more at the first frame past
+  the window, so the model has to carry the framing through instead of
+  cutting to a new shot the moment the overlap ends. May leave a
+  split-second ghost at that frame; try it on a join that jumps.
+- The status box on the Hub node opens the project panel when clicked,
+  the same as the button above it. A drag on it still moves the node.
+
 ## 1.4.1
 
 - **Download an export.** An **Exports** dropdown beside the export

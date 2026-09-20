@@ -279,6 +279,34 @@ def main():
     print("latent video path: 7 blocks are steps 30..36 of the source "
           "latent verbatim, offsets phase-aligned, VAE untouched, trim 22")
 
+    # hold_framing: one more keyframe, the window's own last step, at the
+    # first frame the window does NOT cover - 22 in head mode (the first
+    # delivered frame), 0 in before mode. Nothing else moves: same trim,
+    # same seven pinned blocks ahead of it.
+    for mode, want_anchor in (("head", 22), ("before", 0)):
+        captured.clear()
+        _o, trim_h, _l = node.apply(
+            conditioning=[["c", {}]], latent=target,
+            context_length=22, encode_mode="video", anchor_mode=mode,
+            crop="disabled", audio_context_length=22, audio_mode="timeline",
+            video_source="latent", context_latent=prev_marked,
+            hold_framing=True)
+        kfh = captured["minimax_keyframes"]
+        assert len(kfh) == 8, (mode, len(kfh))
+        assert kfh[-1][nodes.MC_KEY] == want_anchor, (mode, kfh[-1][nodes.MC_KEY])
+        assert np.array_equal(kfh[-1]["latent"].a, kfh[-2]["latent"].a), mode
+        assert np.array_equal(kfh[-1]["latent"].a, src.a[:, :, 36:37]), mode
+        assert trim_h == (22 if mode == "head" else 0), (mode, trim_h)
+    captured.clear()
+    node.apply(
+        conditioning=[["c", {}]], latent=target,
+        context_length=22, encode_mode="video", anchor_mode="head",
+        crop="disabled", audio_context_length=22, audio_mode="timeline",
+        video_source="latent", context_latent=prev_marked)
+    assert len(captured["minimax_keyframes"]) == 7, "off must mean no anchor"
+    print("hold_framing: an 8th keyframe holds step 36 at frame 22 (head) "
+          "or 0 (before); off leaves the seven alone")
+
     # the latent path must work with NO vae wired at all
     captured.clear()
     out4, trim4, _l4 = node.apply(
