@@ -452,6 +452,25 @@ class Project:
                 % (tail["index"], lat))
         return lat
 
+    def first_latent_path(self):
+        """Clip 1's latent: the chain's least-drifted sound and picture.
+
+        Every later clip is generated from the one before it, so clip 1
+        is the only link that was not continuing an approximation. Its
+        audio is what the scene sounded like before any generational
+        drift, which is what an anchor wants. Status is deliberately not
+        checked: an anchor is a reference, not a chain link, so a clip 1
+        that is still pending is as good a description of the voices as
+        an approved one.
+        """
+        if not self.clips:
+            return None
+        first = self.clips[0]
+        _video, lat, _side = self._paths(first["basename"])
+        if not os.path.isfile(lat):
+            return None
+        return lat
+
     def clip_video_path(self, basename):
         return self._paths(basename)[0]
 

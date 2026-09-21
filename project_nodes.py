@@ -124,9 +124,9 @@ class H3ProjectHub:
         }
 
     RETURN_TYPES = ("H3_PROJECT", "LATENT", "BOOLEAN", "STRING", "INT",
-                    "INT")
+                    "INT", "LATENT")
     RETURN_NAMES = ("project", "context_latent", "chain_active", "status",
-                    "width", "height")
+                    "width", "height", "anchor_latent")
     OUTPUT_TOOLTIPS = (
         "this project's identity, for H3 Project Save",
         "the approved tail's latent, for H3 Context",
@@ -134,7 +134,10 @@ class H3ProjectHub:
         "what the project is doing, in words",
         "the project's picture width - wire it into the empty latent so "
         "every clip renders at one size. 0 until the project has a size",
-        "the project's picture height. 0 until the project has a size")
+        "the project's picture height. 0 until the project has a size",
+        "clip 1's latent, for H3 Context's anchor_latent input: the "
+        "chain's least-drifted sound, to hold a voice steady down a long "
+        "chain. Empty until the project has a clip")
     FUNCTION = "resolve"
     CATEGORY = "conditioning/minimax"
     DESCRIPTION = ("One project per chain: resolves the approved tail's "
@@ -190,6 +193,22 @@ class H3ProjectHub:
             context = _placeholder_latent()
             active = False
 
+        # clip 1's latent, for the anchor. Unlike the tail this is not a
+        # chain link and a missing file is not fatal: the anchor is an
+        # optional reference, so an empty placeholder is the right answer
+        # rather than refusing to resolve the project at all.
+        anchor = _placeholder_latent()
+        first_path = p.first_latent_path()
+        if first_path is not None:
+            try:
+                data = _st_load(first_path)
+                if "video" in data and "audio" in data:
+                    anchor = {"samples": [data["video"], data["audio"]]}
+            except Exception:
+                _LOG.warning("h3_suite: clip 1's latent could not be read "
+                             "for the anchor (%s); continuing without it",
+                             first_path)
+
         index, take, basename = p.next_save()
         tail = p.chain_tail()
         pend = p.pending()
@@ -213,7 +232,7 @@ class H3ProjectHub:
 
         handle = {"name": p.name, "output_dir": out_dir}
         return (handle, context, active, status,
-                res[0] if res else 0, res[1] if res else 0)
+                res[0] if res else 0, res[1] if res else 0, anchor)
 
 
 def _write_video(path, images, audio, fps, tags=None):

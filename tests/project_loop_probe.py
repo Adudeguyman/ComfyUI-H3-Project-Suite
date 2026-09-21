@@ -142,7 +142,7 @@ def main():
     ctx_node = nodes.H3Context()
 
     # ---- 1: empty project resolves inactive ----
-    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh, _anch = hub.resolve("LoopTest", True)
     assert active is False
     assert "fresh clip 1" in status and "clip_001_take1" in status
     tok0 = pn.H3ProjectHub.IS_CHANGED("LoopTest")
@@ -206,7 +206,7 @@ def main():
           "meta all carry prompt/workflow/dimensions")
 
     # still inactive: pending does not arm the chain, but token moved
-    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh, _anch = hub.resolve("LoopTest", True)
     assert active is False and "PENDING" in status
     assert pn.H3ProjectHub.IS_CHANGED("LoopTest") != tok0
     print("4. pending clip does not arm the chain; IS_CHANGED moved")
@@ -214,7 +214,7 @@ def main():
     # ---- 5: approve via manifest (what the route does), re-resolve ----
     from h3p.project import Project, ProjectError
     Project(out, "LoopTest").approve()
-    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh, _anch = hub.resolve("LoopTest", True)
     assert active is True
     src = context["samples"]
     parts = src.parts if hasattr(src, "parts") else src
@@ -246,13 +246,13 @@ def main():
     proj = Project(out, "LoopTest")
     assert [t["take"] for t in proj.takes_of(2)] == [1, 2]
     proj.select_take(2, 1)
-    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh, _anch = hub.resolve("LoopTest", True)
     assert "clip_002_take1" in status or proj.pending()["take"] == 1
     Project(out, "LoopTest").reject()
     # reject clears every take of the dropped clip
     assert os.path.isfile(os.path.join(trash, "clip_002_take1.mp4"))
     assert os.path.isfile(os.path.join(trash, "clip_002_take2.mp4"))
-    handle, context, active, status, vw, vh = hub.resolve("LoopTest", True)
+    handle, context, active, status, vw, vh, _anch = hub.resolve("LoopTest", True)
     assert active is True and "clip_002_take1" in status
     assert float((context["samples"].parts if hasattr(
         context["samples"], "parts") else context["samples"])[0]
@@ -272,14 +272,14 @@ def main():
     else:
         raise AssertionError("a size contradicting clip 1 was accepted")
     # the same size the clips already are is not a contradiction
-    _h, _c, _a, _s, w2, h2 = hub.resolve("LoopTest", True,
+    _h, _c, _a, _s, w2, h2, _an2 = hub.resolve("LoopTest", True,
                                          width=clip1["width"],
                                          height=clip1["height"])
     assert (w2, h2) == (clip1["width"], clip1["height"])
 
     empty = Project(out, "SizeDecl", create=True)
     assert empty.resolution() is None
-    _h, _c, _a, st, w3, h3 = hub.resolve("SizeDecl", True, width=1216,
+    _h, _c, _a, st, w3, h3, _an3 = hub.resolve("SizeDecl", True, width=1216,
                                          height=672)
     assert (w3, h3) == (1216, 672), (w3, h3)
     assert "1216x672" in st, st

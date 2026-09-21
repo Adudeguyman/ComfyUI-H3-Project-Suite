@@ -8,13 +8,15 @@
   floor under the quiet moments. A voice degrading down a chain shows as
   the floor and the high band creeping up while the centroid moves,
   which is now a trend with a slope rather than a feeling.
-- **Anchor audio** on H3 Context, experimental. Wire a clean sample of
-  the character's voice and it is given to the model as a reference on
-  every clip, including the first, so identity is pulled back to the
-  same source each time instead of to the previous clip's slightly
-  drifted version. The tail window still continues the sound; this
-  says what it should keep sounding like. Needs the audio VAE; the
-  first ten seconds are used.
+- **Anchor latent** on H3 Context, experimental. The Hub gained an
+  `anchor_latent` output carrying clip 1's saved latent; wire it to the
+  matching input and its sound is given to the model as a reference on
+  every clip, so the voices are pulled back to how the scene actually
+  sounded instead of to the previous clip's slightly worse copy. It is
+  the clip's own latent, so it covers two people talking or a voice the
+  model invented, needs no recording from outside the project and no
+  audio VAE. The tail window still continues the sound; this says what
+  it should keep sounding like. The first ten seconds are used.
 
 ## 1.4.2
 
