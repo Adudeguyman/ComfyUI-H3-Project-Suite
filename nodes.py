@@ -160,6 +160,39 @@ def _encode_tail_audio(audio_vae, audio, seconds):
     return z, int(z.shape[-1])
 
 
+ANCHOR_MAX_SECONDS = 10.0
+
+
+def _encode_anchor_audio(audio_vae, audio, max_seconds=ANCHOR_MAX_SECONDS):
+    """Encode a fixed reference sound as a stock-placement audio ref.
+
+    Unlike the tail window, which continues the previous clip, this is
+    the same sample every clip: something for the model to keep sounding
+    LIKE while it continues. Capped so a long file does not cost hundreds
+    of conditioning rows; the first `max_seconds` are what gets used.
+    Returns the ref block core's own reference node would build.
+    """
+    waveform = audio["waveform"]  # [B, C, L]
+    sr = int(audio["sample_rate"])
+    vae_sr = int(getattr(audio_vae, "audio_sample_rate", 32000))
+    if sr != vae_sr:
+        if torchaudio is None:
+            raise RuntimeError(
+                "h3_suite: anchor_audio is %d Hz but the VAE wants %d Hz "
+                "and torchaudio is not available to resample." % (sr, vae_sr))
+        waveform = torchaudio.functional.resample(waveform, sr, vae_sr)
+    cap = int(max_seconds * vae_sr)
+    truncated = int(waveform.shape[-1]) > cap
+    if truncated:
+        waveform = waveform[..., :cap]
+    z = audio_vae.encode(waveform[:1].movedim(1, -1))  # [1, 32, 2, T]
+    steps = int(z.shape[-1])
+    _LOG.info("h3_suite: anchor audio %.2fs -> %d ref steps%s",
+              waveform.shape[-1] / float(vae_sr), steps,
+              " (cut to the first %.0fs)" % max_seconds if truncated else "")
+    return {"kind": "audio", "ref_audio_t": steps, "audio_latent": z}
+
+
 def _av_latent(parts):
     """Pair a video and an audio latent the way ComfyUI's own H3 nodes do.
 
@@ -386,6 +419,17 @@ class H3Context:
                     "tooltip": "Audio of the previous clip. The tail matching the "
                                "pinned frames is encoded and pinned alongside "
                                "them. Ignored when context_latent is wired."}),
+                "anchor_audio": ("AUDIO", {
+                    "tooltip": "EXPERIMENTAL. A fixed sound the voice should "
+                               "keep matching: a clean sample of the character "
+                               "from clip 1, or a real recording. Given to the "
+                               "model as a reference on EVERY clip, including "
+                               "the first, so identity is pulled back to the "
+                               "same source each time instead of to last "
+                               "clip's slightly drifted version. Needs "
+                               "audio_vae. The first 10 seconds are used. The "
+                               "prompt cannot refer to it by tag; it is "
+                               "conditioning only."}),
             },
         }
 
@@ -558,20 +602,34 @@ class H3Context:
               audio_mode="timeline", video_source="frames", vae=None,
               context_frames=None, context_latent=None, audio_vae=None,
               context_audio=None, enabled=True, seed_head=False,
-              head_hold=1.0, hold_framing=False):
+              head_hold=1.0, hold_framing=False, anchor_audio=None):
         try:
             from .export_latents import register_vaes
             register_vaes(vae, audio_vae)
         except Exception:
             pass
         context_length = int(context_length)
+        anchor_ref = None
+        if anchor_audio is not None:
+            if audio_vae is None:
+                raise ValueError(
+                    "h3_suite: anchor_audio is wired but audio_vae is not. "
+                    "Wire the H3 audio VAE so the anchor can be encoded.")
+            anchor_ref = _encode_anchor_audio(audio_vae, anchor_audio)
         if enabled is False:
             # inert passthrough: conditioning untouched, trim 0 makes the
             # Trim node a no-op too. The whole chain path disarms off one
             # boolean instead of a bypass ritual. No patches are activated
-            # on this path - a disabled chain leaves ComfyUI stock.
+            # on this path - a disabled chain leaves ComfyUI stock. The
+            # one exception is the anchor: it is a plain reference block,
+            # wanted on clip 1 as much as on any other, and there are no
+            # keyframes here for it to collide with.
             _LOG.info("h3_suite: motion context disabled (chain inactive); "
-                      "passing conditioning through untouched")
+                      "passing conditioning through untouched%s",
+                      " with the audio anchor" if anchor_ref else "")
+            if anchor_ref is not None:
+                conditioning = node_helpers.conditioning_set_values(
+                    conditioning, {"minimax_refs": [anchor_ref]}, append=True)
             return (conditioning, 0, latent)
         _activate_inline_patches()
 
@@ -717,6 +775,16 @@ class H3Context:
             motion_context_audio_ref = ref     # None on a native core
 
         out = node_helpers.conditioning_set_values(conditioning, values)
+        if anchor_ref is not None:
+            if not payload_patch_applied():
+                raise RuntimeError(
+                    "h3_suite: the payload patch is not active, so a "
+                    "reference block would overwrite the pinned video "
+                    "latents. Check the startup log.")
+            # ahead of the motion-context ref: on patched cores the layout
+            # fixup locates the pinned audio by its being LAST
+            out = node_helpers.conditioning_set_values(
+                out, {"minimax_refs": [anchor_ref]}, append=True)
         if motion_context_audio_ref is not None:
             out = node_helpers.conditioning_set_values(
                 out, {"minimax_refs": [motion_context_audio_ref]}, append=True)

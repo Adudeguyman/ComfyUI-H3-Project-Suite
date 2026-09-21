@@ -247,6 +247,54 @@ def main():
     assert abs(ref2[nodes.MC_AUDIO_KEY] - 22.0) < 1e-9
     print("vae path: unchanged, end_frame %.1f" % ref2[nodes.MC_AUDIO_KEY])
 
+    # anchor_audio: a fixed reference block, ahead of the motion-context
+    # ref so that one stays last, and present on the disabled path too
+    captured.clear()
+    anchor = {"waveform": T(np.zeros((1, 2, 32000 * 3), dtype=np.float32)),
+              "sample_rate": 32000}
+    node.apply(
+        conditioning=[["c", {}]], vae=VAE(), latent=target,
+        context_frames=context, context_length=22, encode_mode="video",
+        anchor_mode="head", crop="disabled", audio_context_length=22,
+        audio_mode="timeline", audio_vae=AudioVAE(), context_audio=audio,
+        anchor_audio=anchor)
+    refs_a = captured["minimax_refs"]
+    assert len(refs_a) == 2, len(refs_a)
+    assert refs_a[0]["kind"] == "audio" and nodes.MC_AUDIO_KEY not in refs_a[0]
+    assert refs_a[0]["ref_audio_t"] == 120, refs_a[0]["ref_audio_t"]  # 3s * 40
+    assert nodes.MC_AUDIO_KEY in refs_a[1], "motion-context ref must stay last"
+    # too long -> cut to the first 10 s (400 steps), not refused
+    long = {"waveform": T(np.zeros((1, 2, 32000 * 14), dtype=np.float32)),
+            "sample_rate": 32000}
+    captured.clear()
+    node.apply(
+        conditioning=[["c", {}]], vae=VAE(), latent=target,
+        context_frames=context, context_length=22, encode_mode="video",
+        anchor_mode="head", crop="disabled", audio_context_length=22,
+        audio_mode="timeline", audio_vae=AudioVAE(), context_audio=audio,
+        anchor_audio=long)
+    assert captured["minimax_refs"][0]["ref_audio_t"] == 400
+    # disabled chain: conditioning otherwise untouched, but the anchor rides
+    out_d, trim_d, _ = node.apply(
+        conditioning=[["c", {"k": 1}]], latent=target, context_length=22,
+        encode_mode="video", anchor_mode="head", crop="disabled",
+        audio_context_length=22, audio_mode="timeline",
+        audio_vae=AudioVAE(), anchor_audio=anchor, enabled=False)
+    assert trim_d == 0
+    assert out_d[0][1]["k"] == 1 and "minimax_keyframes" not in out_d[0][1]
+    assert [r["kind"] for r in out_d[0][1]["minimax_refs"]] == ["audio"]
+    # and it refuses without the VAE it needs
+    try:
+        node.apply(conditioning=[["c", {}]], latent=target, context_length=22,
+                   encode_mode="video", anchor_mode="head", crop="disabled",
+                   audio_context_length=22, audio_mode="timeline",
+                   anchor_audio=anchor, enabled=False)
+        raise AssertionError("anchor without audio_vae was accepted")
+    except ValueError as exc:
+        assert "audio_vae" in str(exc), str(exc)
+    print("anchor_audio: fixed ref ahead of the motion-context ref, capped "
+          "at 10s, present on clip 1, refused without audio_vae")
+
     # video_source="latent": pinned video sliced straight from the previous
     # clip's latent -- phase-aligned tail, no VAE call, content identity
     captured.clear()

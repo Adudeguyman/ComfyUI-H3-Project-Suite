@@ -137,6 +137,8 @@ a.h3p-btn:not([href]){opacity:.5;pointer-events:none;}
   padding:10px 14px;border-bottom:1px solid #232833;color:#d7dbe2;
   font-size:calc(13px * var(--h3p-fs, 1));}
 .h3p-driftwrap .body{padding:14px;}
+table.h3p-drift tr.h3p-driftsep td{padding-top:10px;color:#6f86b8;font-size:calc(10px * var(--h3p-fs, 1));
+  text-transform:uppercase;letter-spacing:.06em;border-bottom:none;}
 table.h3p-drift{width:100%;border-collapse:collapse;font-size:calc(12px * var(--h3p-fs, 1));
   color:#c3c9d4;}
 table.h3p-drift th{text-align:left;font-weight:400;color:#7d8697;
@@ -2327,28 +2329,38 @@ class ProjectModal extends ChainTimeline {
     } catch (e) { this.hideConfirm(); toast(e.message, true); return; }
 
     const t = d.trend || {};
+    // dB measures are already logarithmic: their change is the figure,
+    // and a percentage of a negative dBFS number would mean nothing
+    const isDb = (key) => key === "loudness" || key === "noise_floor";
     const fmtRow = (key, label, unit) => {
       const x = t[key];
       if (!x) return "";
       const per = x.per_clip;
-      const dir = Math.abs(x.pct_total) < 1.5 ? "steady"
-        : (x.total > 0 ? "rising" : "falling");
+      const moved = isDb(key) ? Math.abs(x.total) >= 1.0
+                              : Math.abs(x.pct_total) >= 1.5;
+      const dir = !moved ? "steady" : (x.total > 0 ? "rising" : "falling");
+      const change = isDb(key)
+        ? `${x.total > 0 ? "+" : ""}${x.total.toFixed(1)} dB`
+        : `${x.total > 0 ? "+" : ""}${x.total.toFixed(1)}` +
+          ` (${x.pct_total > 0 ? "+" : ""}${x.pct_total.toFixed(1)}%)`;
       return `<tr><td>${label}</td>` +
         `<td class="n">${x.first.toFixed(1)}${unit}</td>` +
         `<td class="n">${x.last.toFixed(1)}${unit}</td>` +
-        `<td class="n">${x.total > 0 ? "+" : ""}${x.total.toFixed(1)}` +
-        ` (${x.pct_total > 0 ? "+" : ""}${x.pct_total.toFixed(1)}%)</td>` +
+        `<td class="n">${change}</td>` +
         `<td class="n">${per > 0 ? "+" : ""}${per.toFixed(2)}/clip</td>` +
         `<td>${dir}</td></tr>`;
     };
     // a bar per clip for the measure that moved most, so the shape of
-    // the drift is visible - steady slide or one bad clip
+    // the drift is visible - steady slide or one bad clip. dB measures
+    // compete on their change in dB, roughly one dB to one percent.
     let worst = null, worstPct = 0;
-    for (const k of ["luma", "contrast", "sharpness", "colour"]) {
+    for (const k of ["luma", "contrast", "sharpness", "colour",
+                     "loudness", "brightness", "high_band", "noise_floor"]) {
       const x = t[k];
-      if (x && Math.abs(x.pct_total || 0) > worstPct) {
-        worstPct = Math.abs(x.pct_total); worst = k;
-      }
+      if (!x) continue;
+      const score = isDb(k) ? Math.abs(x.total || 0)
+                            : Math.abs(x.pct_total || 0);
+      if (score > worstPct) { worstPct = score; worst = k; }
     }
     let spark = "";
     if (worst) {
@@ -2372,11 +2384,18 @@ class ProjectModal extends ChainTimeline {
       fmtRow("contrast", "contrast", "") +
       fmtRow("sharpness", "sharpness", "") +
       fmtRow("colour", "colour", "%") +
+      (t.loudness ? `<tr class="h3p-driftsep"><td colspan="6">sound</td></tr>` +
+        fmtRow("loudness", "loudness", " dB") +
+        fmtRow("brightness", "brightness (centroid)", " Hz") +
+        fmtRow("high_band", "high band", "%") +
+        fmtRow("noise_floor", "noise floor", " dB") : "") +
       `</tbody></table>` + spark +
       `<p class="h3p-note">These also move when the content changes \u2014 ` +
-      `a darker scene lowers brightness honestly. Read the trend across ` +
-      `many clips of one continuous scene, not any single number. A cut ` +
-      `to a new angle resets most of this.</p>`;
+      `a darker scene lowers brightness honestly, and a quiet line lowers ` +
+      `loudness. Read the trend across many clips of one continuous ` +
+      `scene, not any single number. A cut to a new angle resets most of ` +
+      `the picture rows. A voice drifting shows as the noise floor and ` +
+      `high band creeping up while the centroid moves.</p>`;
     this.hideConfirm();
     this.drift.classList.add("on");
   }

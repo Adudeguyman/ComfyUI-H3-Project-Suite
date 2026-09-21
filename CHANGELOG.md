@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Sound in the drift report.** Measure drift now reports four sound
+  measures per clip alongside the picture ones: loudness, brightness as
+  the spectral centroid, the share of energy above 4 kHz, and the noise
+  floor under the quiet moments. A voice degrading down a chain shows as
+  the floor and the high band creeping up while the centroid moves,
+  which is now a trend with a slope rather than a feeling.
+- **Anchor audio** on H3 Context, experimental. Wire a clean sample of
+  the character's voice and it is given to the model as a reference on
+  every clip, including the first, so identity is pulled back to the
+  same source each time instead of to the previous clip's slightly
+  drifted version. The tail window still continues the sound; this
+  says what it should keep sounding like. Needs the audio VAE; the
+  first ten seconds are used.
+
 ## 1.4.2
 
 - **Hold framing** on H3 Context, off by default and experimental. Keeps
