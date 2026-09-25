@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-h3-project-suite"
 description = "Long-form video with MiniMax H3. Chain clips that genuinely continue each other in picture and sound, managed as a project with review, takes, branching and one-click export. Each clip is handed to the next in latent space, so no decode and re-encode round trip sits between them."
-version = "1.4.2"
+version = "1.5.0"
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.10"

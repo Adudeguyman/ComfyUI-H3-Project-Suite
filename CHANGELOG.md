@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
 
 - **Sound in the drift report.** Measure drift now reports four sound
   measures per clip alongside the picture ones: loudness, brightness as

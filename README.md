@@ -26,6 +26,11 @@ The idea is simple — create and automate your video extensions without getting
 
 ## What's new
 
+**1.5.0**
+- **Sound in the drift report.** Measure drift now tracks loudness, hiss and the high end of each clip's sound as well as the picture, so a voice wearing down over a chain shows up as a number instead of a hunch.
+- **Anchor latent.** An experimental Hub output that feeds clip 1's sound to every later clip as a reference, to keep voices sounding like themselves down a long chain. It works from the project's own files, so it covers invented voices and scenes with several people talking. One wire from the Hub to H3 Context.
+- Fixed chained clips failing with a shape mismatch when an audio reference is wired and an older copy of H3 Motion Context is also installed.
+
 **1.4.2**
 - **Hold framing.** An experimental toggle on H3 Context that keeps the previous shot's framing going after the overlap ends, instead of letting the model cut to a new angle at that point. Off by default; it can leave a slight ghost at the seam, so try fixing the prompt first.
 - Click the status box on the Hub node to open the project panel.
