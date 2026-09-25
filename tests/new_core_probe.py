@@ -167,7 +167,7 @@ def main():
         def __init__(self, d):
             self.cond = d
 
-    state = {"combine": False}
+    state = {"combine": False, "clobber_audio": False}
 
     class MiniMaxH3:
         def extra_conds(self, **kw):
@@ -175,8 +175,14 @@ def main():
             refs = kw.get("minimax_refs") or []
             kfv = [k["latent"] for k in kfs if "latent" in k]
             rv = [r["latent"] for r in refs if "latent" in r]
-            payload = {"cond_video_latents":
-                       (kfv + rv) if state["combine"] else rv}
+            kfa = [k["audio_latent"] for k in kfs if "audio_latent" in k]
+            ra = [r["audio_latent"] for r in refs if "audio_latent" in r]
+            combine = state["combine"]
+            payload = {
+                "cond_video_latents": (kfv + rv) if combine else rv,
+                # an old sibling pack rebuilds audio from refs alone
+                "cond_audio_latents": (kfa + ra) if combine
+                and not state["clobber_audio"] else ra}
             return {"minimax_payload": Cond(payload)}
 
     mb.MiniMaxH3 = MiniMaxH3
@@ -224,6 +230,20 @@ def main():
         "patch rewrote %s on a fixed core" % Recording.writes
     print("6. new core: payload left exactly as core built it, no writes "
           "-> %s" % vals2)
+
+    # new core, but keyframe audio stripped by an older sibling's rebuild:
+    # the video count still matches, so only the audio check catches it
+    pp._orig_extra_conds = base
+    state["clobber_audio"] = True
+    kfa = kf + [{"audio_latent": "KA"}]
+    rfa = rf + [{"audio_latent": "RA"}]
+    got3 = inst.extra_conds(minimax_keyframes=kfa, minimax_refs=rfa)
+    p3 = got3["minimax_payload"].cond
+    assert p3["cond_audio_latents"] == ["KA", "RA"], p3["cond_audio_latents"]
+    assert p3["cond_video_latents"] == ["K1", "K2", "R1"], \
+        p3["cond_video_latents"]
+    print("7. stripped keyframe audio restored ahead of ref audio -> %s"
+          % p3["cond_audio_latents"])
 
     print("all checks passed")
 

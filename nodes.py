@@ -836,6 +836,12 @@ class H3Context:
             return cls._mask_layer_state
         try:
             from .patch_layout import _mode as layout_mode
+            if layout_mode == "native":
+                _LOG.info("h3_suite: seed_head at full strength - this "
+                          "ComfyUI holds masked rows at the cond timestep "
+                          "itself")
+                cls._mask_layer_state = True
+                return True
             if layout_mode != "audio_only":
                 _LOG.info("h3_suite: seed_head running in stock form - the "
                           "full-strength mask layer needs a ComfyUI with "

@@ -51,16 +51,25 @@ def _patched_extra_conds(self, **kwargs):
                      "keyframe latents may have been overwritten by refs")
         return out
 
-    kf_video = [kf["latent"] for kf in keyframes if "latent" in kf]
+    kf_video = [kf["latent"] for kf in keyframes if kf.get("latent") is not None]
     ref_video = [r["latent"] for r in refs if "latent" in r]
+    # on 0.34+ cores the carried-over sound rides as keyframe audio, and the
+    # layout reserves its rows ahead of the ref audio rows
+    kf_audio = [kf["audio_latent"] for kf in keyframes
+                if kf.get("audio_latent") is not None]
+    ref_audio = [r["audio_latent"] for r in refs
+                 if r.get("audio_latent") is not None]
     # PR #15439 merged upstream on 2026-08-13 and concatenates these in
-    # the same order we do. On such a core the payload is already right,
-    # and rewriting it is at best a no-op and at worst a divergence if
-    # upstream refines the order later. Check what core actually produced
-    # rather than trusting a version number.
-    existing = payload.get("cond_video_latents", None)
-    if isinstance(existing, (list, tuple)) \
-            and len(existing) == len(kf_video) + len(ref_video):
+    # the same order we do, so on such a core the payload is already
+    # right. Both lists are checked: an older copy of a sibling motion-
+    # context pack rebuilds the audio list from refs alone, which leaves
+    # the video count right while dropping the keyframe audio, and core
+    # then fails with a row mismatch in its forward.
+    video = payload.get("cond_video_latents", None)
+    audio = payload.get("cond_audio_latents", None)
+    if isinstance(video, (list, tuple)) and isinstance(audio, (list, tuple)) \
+            and len(video) == len(kf_video) + len(ref_video) \
+            and len(audio) == len(kf_audio) + len(ref_audio):
         global _core_fixed_logged
         if not _core_fixed_logged:
             _LOG.info("h3_suite: this ComfyUI already combines keyframe and "
@@ -68,9 +77,13 @@ def _patched_extra_conds(self, **kwargs):
                       "payload as core built it")
             _core_fixed_logged = True
         return out
+    if kf_audio:
+        _LOG.warning("h3_suite: the H3 payload was missing keyframe audio "
+                     "(%d of %d audio latents present); restored it. An "
+                     "older H3 Motion Context pack is the usual cause.",
+                     len(audio or ()), len(kf_audio) + len(ref_audio))
     payload["cond_video_latents"] = kf_video + ref_video
-    payload["cond_audio_latents"] = [r["audio_latent"] for r in refs
-                                     if r.get("audio_latent") is not None]
+    payload["cond_audio_latents"] = kf_audio + ref_audio
     # only write frame_count when we actually have one. This wrapper fires
     # for ANY graph combining keyframes and refs, not just ours; a graph
     # that reaches here without minimax_frame_count may have a valid value
