@@ -17,6 +17,10 @@
   model invented, needs no recording from outside the project and no
   audio VAE. The tail window still continues the sound; this says what
   it should keep sounding like. The first ten seconds are used.
+- Fixed chained clips failing with a shape mismatch when a Ref2VA
+  audio reference is wired, on ComfyUI 0.34 and later with an older
+  copy of H3 Motion Context also installed. The carried-over sound
+  is now restored if another pack drops it.
 
 ## 1.4.2
 
