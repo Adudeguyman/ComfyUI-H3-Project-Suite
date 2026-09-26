@@ -23,13 +23,10 @@ jobs:
     # it. Versions are immutable: set it BEFORE the push that publishes.
     env:
       COMFY_NODE_CHANGELOG: |
-        Sound in the drift report: loudness, hiss and high-end measures
-        per clip alongside the picture ones. Anchor latent, experimental:
-        a Hub output that feeds clip 1's sound to every later clip as a
-        reference, to keep voices steady down a long chain. Fixed chained
-        clips failing with a shape mismatch when an audio reference is
-        wired alongside an older H3 Motion Context install. See
-        CHANGELOG.md.
+        The project panel now works inside SwarmUI, whose proxy drops the
+        header that carries the panel's security token. The token falls
+        back to the request body, or the URL for file uploads. Plain
+        ComfyUI is unchanged. See SECURITY.md and CHANGELOG.md.
     steps:
       - name: Check out code
         uses: actions/checkout@v4

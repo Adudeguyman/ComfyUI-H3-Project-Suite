@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.1
 
 - The project panel works inside SwarmUI. Its proxy drops the header
   that carries the panel's security token, so every action failed with

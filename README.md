@@ -26,6 +26,9 @@ The idea is simple — create and automate your video extensions without getting
 
 ## What's new
 
+**1.5.1**
+- The project panel now works inside SwarmUI. Before, every button in the panel failed there with a "missing or stale session token" error.
+
 **1.5.0**
 - **Sound in the drift report.** Measure drift now tracks loudness, hiss and the high end of each clip's sound as well as the picture, so a voice wearing down over a chain shows up as a number instead of a hunch.
 - **Anchor latent.** An experimental Hub output that feeds clip 1's sound to every later clip as a reference, to keep voices sounding like themselves down a long chain. It works from the project's own files, so it covers invented voices and scenes with several people talking. One wire from the Hub to H3 Context.
