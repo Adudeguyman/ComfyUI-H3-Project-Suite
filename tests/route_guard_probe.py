@@ -144,6 +144,39 @@ async def run():
         print("%d POST routes: refused without the token, cross-site or "
               "non-JSON; admitted with all three" % len(posts))
 
+        # -- the token without its header, as through SwarmUI ---------
+        # its proxy forwards path, query, body and Content-Type only, so
+        # there is no header, no Origin and no Sec-Fetch-Site. JSON routes
+        # take the token in the body and nowhere else; only the upload,
+        # checked before its file is read, takes it in the query.
+        param = routes_mod.TOKEN_PARAM
+        for path in posts:
+            if path.endswith("/upload"):
+                r = await client.post(path, data={"file": b"x"},
+                                      params={param: TOKEN})
+                assert r.status not in (403, 415), (path, r.status)
+                r = await client.post(path, data={"file": b"x",
+                                                  param: TOKEN})
+                assert r.status == 403, (path, "form-field token", r.status)
+                checks += 2
+                continue
+            r = await client.post(path, json={**body, param: TOKEN})
+            assert r.status not in (403, 415), (path, r.status,
+                                                await r.text())
+            r = await client.post(path, json={**body, param: "x" * 43})
+            assert r.status == 403, (path, "wrong body token", r.status)
+            r = await client.post(path, json={**body, param: 12345})
+            assert r.status == 403, (path, "non-string token", r.status)
+            r = await client.post(path, json=body, params={param: TOKEN})
+            assert r.status == 403, (path, "URL token on JSON", r.status)
+            r = await client.post(path, json={**body, param: TOKEN},
+                                  headers={"Origin": "http://evil.example"})
+            assert r.status == 403, (path, "body token, foreign", r.status)
+            checks += 5
+        print("token without the header: in the body for JSON routes, in "
+              "the URL for the upload only; wrong, non-string, misplaced "
+              "and foreign all refused")
+
         # -- every GET -----------------------------------------------
         for path in gets:
             if "{" in path:
@@ -186,7 +219,7 @@ async def run():
 
         # -- the guard must be what the suite measures ----------------
         orig = routes_mod.token_ok
-        routes_mod.token_ok = lambda headers: True
+        routes_mod.token_ok = lambda sent: True
         try:
             r = await client.post(posts[0], json=body)
             assert r.status != 403, (

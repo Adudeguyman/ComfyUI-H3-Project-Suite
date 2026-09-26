@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The project panel works inside SwarmUI. Its proxy drops the header
+  that carries the panel's security token, so every action failed with
+  "missing or stale session token". The panel now falls back to
+  sending the token inside the request when that happens. See
+  SECURITY.md.
+
 ## 1.5.0
 
 - **Sound in the drift report.** Measure drift now reports four sound

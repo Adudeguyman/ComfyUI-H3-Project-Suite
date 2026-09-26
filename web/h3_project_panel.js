@@ -336,10 +336,27 @@ function toast(msg, bad = false) {
 // Every state-changing route wants the server's session token in a
 // header. The token comes from a same-origin GET, which a page on
 // another origin can send but never read - that is the whole defence.
-// One shared helper attaches it and retries once when the server says
-// the token is stale (a restart with the editor still open).
+// One shared helper attaches it and retries when the server says the
+// token is missing or stale: first with a fresh token (a restart with the
+// editor still open), then with it in the request itself, for a proxy
+// that drops custom headers (SwarmUI forwards only the body and
+// Content-Type). Once that works it stays in use for this page.
 const TOKEN_HEADER = "X-H3Suite-Token";
+const TOKEN_PARAM = "h3_token";
 let tokenPromise = null;
+let tokenInRequest = false;
+
+// JSON goes in the body, which proxies do not log. An upload is refused
+// before its file is read, so the server looks for its token in the URL.
+function carryToken(path, init, token) {
+  if (init.body instanceof FormData) {
+    const sep = path.includes("?") ? "&" : "?";
+    return [`${path}${sep}${TOKEN_PARAM}=${encodeURIComponent(token)}`, init];
+  }
+  const body = JSON.stringify({ ...JSON.parse(init.body || "{}"),
+                                [TOKEN_PARAM]: token });
+  return [path, { ...init, body }];
+}
 function sessionToken(fresh = false) {
   if (fresh || !tokenPromise) {
     tokenPromise = api.fetchApi("/h3_suite/token")
@@ -352,14 +369,21 @@ function sessionToken(fresh = false) {
 }
 
 async function postApi(path, init = {}) {
-  const send = async (token) => api.fetchApi(path, {
-    ...init, method: "POST",
-    headers: { ...(init.headers || {}), [TOKEN_HEADER]: token },
-  });
-  let resp = await send(await sessionToken());
-  if (resp.status === 403) {
-    const data = await resp.clone().json().catch(() => ({}));
-    if (data.token_required) resp = await send(await sessionToken(true));
+  const send = async (token, inRequest) => {
+    const [url, opts] = inRequest ? carryToken(path, init, token)
+                                  : [path, init];
+    return api.fetchApi(url, {
+      ...opts, method: "POST",
+      headers: { ...(opts.headers || {}), [TOKEN_HEADER]: token },
+    });
+  };
+  const refused = async (r) => r.status === 403
+    && (await r.clone().json().catch(() => ({}))).token_required;
+  let resp = await send(await sessionToken(), tokenInRequest);
+  if (await refused(resp)) resp = await send(await sessionToken(true), tokenInRequest);
+  if (!tokenInRequest && await refused(resp)) {
+    resp = await send(await sessionToken(), true);
+    if (resp.ok) tokenInRequest = true;
   }
   return resp;
 }

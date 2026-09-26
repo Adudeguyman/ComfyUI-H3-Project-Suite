@@ -10,9 +10,11 @@ three ways before its handler runs (see SECURITY.md):
 
   1. the request must not be cross-site by the browser's own account
      (Sec-Fetch-Site / Origin against Host);
-  2. it must carry the session token in the X-H3Suite-Token header. The
-     token is minted once per server process and handed out only by a
-     same-origin GET, which a page on another origin can send but can
+  2. it must carry the session token in the X-H3Suite-Token header, or,
+     behind a proxy that drops custom headers, as an h3_token field in
+     the JSON body (the file upload alone takes it as a query parameter).
+     The token is minted once per server process and handed out only by
+     a same-origin GET, which a page on another origin can send but can
      never read;
   3. a JSON route must say Content-Type: application/json, so a cross-
      origin page cannot reach it without a CORS preflight the server
@@ -37,6 +39,7 @@ _LOG = logging.getLogger("h3_suite")
 # it in a request header; the panel fetches it from a same-origin GET.
 _TOKEN = secrets.token_urlsafe(32)
 TOKEN_HEADER = "X-H3Suite-Token"
+TOKEN_PARAM = "h3_token"
 
 # the only files the import side will list, probe, serve or decode
 _VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
@@ -105,9 +108,16 @@ def is_cross_site(headers):
     return not (o_port == h_port or o_port is None or h_port is None)
 
 
-def token_ok(headers):
-    sent = (headers.get(TOKEN_HEADER) or "").encode("utf-8", "replace")
-    return hmac.compare_digest(sent, _TOKEN.encode("utf-8"))
+def token_ok(sent):
+    # SwarmUI's /ComfyBackendDirect proxy rebuilds each request with only
+    # the path, query, body and Content-Type, so the header never arrives
+    # through it. Callers fall back to the body, or for the upload the
+    # query; a page on another origin can no more put the token there
+    # than in a header, because it cannot read it.
+    if not isinstance(sent, str):
+        return False
+    return hmac.compare_digest(sent.encode("utf-8", "replace"),
+                               _TOKEN.encode("utf-8"))
 
 try:
     from aiohttp import web
@@ -144,7 +154,7 @@ def _register():
                           "basename": basename},
         }
 
-    def _guard(request, json_only=True):
+    def _guard(request, sent, json_only=True):
         """None when the request may change state, else the refusal.
 
         Order matters for what a probe learns: cross-site is refused
@@ -154,7 +164,7 @@ def _register():
         if is_cross_site(request.headers):
             return web.json_response(
                 {"error": "cross-site request refused"}, status=403)
-        if not token_ok(request.headers):
+        if not token_ok(sent):
             return web.json_response(
                 {"error": "missing or stale session token",
                  "token_required": True}, status=403)
@@ -166,13 +176,16 @@ def _register():
 
     def _json_post(handler):
         async def wrapped(request):
-            denied = _guard(request)
-            if denied is not None:
-                return denied
             try:
                 body = await request.json()
             except Exception:
                 body = {}
+            in_body = (body.pop(TOKEN_PARAM, None)
+                       if isinstance(body, dict) else None)
+            sent = request.headers.get(TOKEN_HEADER) or in_body
+            denied = _guard(request, sent)
+            if denied is not None:
+                return denied
             try:
                 return web.json_response(handler(body))
             except ProjectError as exc:
@@ -716,8 +729,13 @@ def _register():
         # multipart is a CORS-simple content type, so this is the route a
         # cross-origin page could reach with no preflight at all: the
         # origin check and the token are what stop it. The JSON check
-        # cannot apply here and is skipped on purpose.
-        denied = _guard(request, json_only=False)
+        # cannot apply here and is skipped on purpose. The token is checked
+        # before the file is read, so its fallback is the query, not a
+        # form field.
+        denied = _guard(request,
+                        request.headers.get(TOKEN_HEADER)
+                        or request.rel_url.query.get(TOKEN_PARAM),
+                        json_only=False)
         if denied is not None:
             return denied
         try:

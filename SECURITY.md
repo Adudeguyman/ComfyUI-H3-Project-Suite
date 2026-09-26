@@ -29,6 +29,20 @@ calls it directly.
    on another origin can send a `POST` but can never read that `GET`, so
    it can never learn the header value. This is a server-minted CSRF
    token in the usual sense. Refused with `403` and `token_required`.
+
+   SwarmUI's `/ComfyBackendDirect` proxy rebuilds every request with only
+   the path, query, body and `Content-Type`, so the header never reaches
+   ComfyUI through it. For that case the same token is accepted as an
+   `h3_token` field in the JSON body. The file upload is the one
+   exception: its token is checked before the file is read, so it
+   arrives as an `h3_token` query parameter, and that route accepts it
+   nowhere else. JSON routes refuse a token in the URL. The defence does
+   not depend on where the token travels: a foreign page cannot put it in
+   a body or a URL any more than in a header, because it cannot read it.
+   The panel always tries the header first and falls back only after a
+   request is refused for a missing token. The upload's URL token can
+   appear in a proxy's own request log; it is valid only until ComfyUI
+   restarts.
 3. **JSON content type.** JSON routes require
    `Content-Type: application/json`, which makes the request non-simple
    under CORS: a cross-origin page cannot send it without a preflight,
